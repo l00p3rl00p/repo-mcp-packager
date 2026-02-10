@@ -48,15 +48,71 @@ class SheshaInstaller:
         self.auditor = EnvironmentAuditor(self.project_root)
         self.artifacts = []
 
-    def log(self, msg: str):
+    def ensure_executable(self, path: Path):
+        """Universal Safety: Ensure scripts are executable."""
+        if not path.exists() or not path.is_file(): return
+        try:
+            path.chmod(path.stat().st_mode | 0o111)
+        except Exception as e:
+            self.log(f"⚠️  Failed to set executable on {path.name}: {e}")
+
+    def register_artifact(self, path: str, executable: bool = False):
+        """Track artifacts for rollback and ensure permissions."""
+        p = Path(path)
+        if p not in self.artifacts:
+            self.artifacts.append(p)
+            if executable:
+                self.ensure_executable(p)
         if not self.args.headless:
             print(f"[*] {msg}")
 
     def error(self, msg: str, category: str = "runtime"):
-        """Log error to console and machine-readable logs."""
+        """Log error to console and machine-readable logs, then ROLLBACK."""
         print(f"[!] ERROR: {msg}", file=sys.stderr)
         self.machine_log("error", msg, {"category": category})
+        self.rollback() # Safe exit
         sys.exit(1)
+
+    def pre_flight_checks(self):
+        """Verifies integrity and permissions before starting."""
+        self.log("Running pre-flight checks...")
+        try:
+            # 1. Permission Check
+            test_file = self.project_root / ".shesha_write_test"
+            test_file.write_text("test")
+            test_file.unlink()
+            
+            # 2. Disk Space (Simple check for > 100MB)
+            if hasattr(os, 'statvfs'):
+                st = os.statvfs(self.project_root)
+                free = (st.f_bavail * st.f_frsize) / (1024 * 1024)
+                if free < 100:
+                    self.log(f"⚠️  Low disk space: {free:.1f}MB remaining.")
+            
+            self.log("✅ Pre-flight checks passed.")
+            return True
+        except Exception as e:
+            self.error(f"Pre-flight checks failed (Permissions/IO): {e}")
+            return False
+
+    def rollback(self):
+        """Surgically remove all artifacts created during this run."""
+        if not self.artifacts:
+            return
+            
+        self.log(f"🔄 ROLLBACK: Removing {len(self.artifacts)} partial artifacts...")
+        for art in reversed(self.artifacts):
+            path = Path(art)
+            if path.exists():
+                try:
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                    self.log(f"  🗑️ Removed: {path.name}")
+                except Exception as e:
+                    self.log(f"  ⚠️ Failed to remove {path.name}: {e}")
+        self.log("✅ Rollback complete.")
 
     def machine_log(self, event: str, message: str, data: Optional[Dict[str, Any]] = None):
         """Emit structured JSON for GUI consumption."""
@@ -77,6 +133,41 @@ class SheshaInstaller:
         if self.args.machine:
             print(f"JSON_LOG:{json.dumps(log_entry)}")
 
+    def resolve_entry_point(self) -> Optional[Path]:
+        """Intelligently find and harden the main entry point."""
+        py_files = [f for f in self.project_root.glob("*.py") if f.name not in ["install.py", "uninstall.py", "audit.py", "verify.py"]]
+        sh_files = list(self.project_root.glob("*.sh"))
+        
+        candidates = sh_files + py_files
+        if not candidates:
+            return None
+        
+        if len(candidates) == 1:
+            self.ensure_executable(candidates[0])
+            return candidates[0]
+            
+        self.log("\n🔍 Multiple entry points detected:")
+        for i, c in enumerate(candidates, 1):
+            rec = " (Recommended)" if c.suffix == ".sh" else ""
+            self.log(f"  {i}. {c.name}{rec}")
+            
+        if self.args.headless:
+            # Default to first .sh or first .py
+            best = sh_files[0] if sh_files else py_files[0]
+            self.log(f"Headless Mode: Defaulting to {best.name}")
+            self.ensure_executable(best)
+            return best
+            
+        choice = input(f"\nSelect entry point [1-{len(candidates)}]: ").strip()
+        try:
+            selected = candidates[int(choice) - 1]
+            self.ensure_executable(selected)
+            return selected
+        except:
+            self.log("Invalid selection. Defaulting to first candidate.")
+            self.ensure_executable(candidates[0])
+            return candidates[0]
+
     def discover_project(self) -> Dict[str, Any]:
         """Scan the project root to see what application files are present."""
         self.log(f"Scanning project root: {self.project_root}")
@@ -93,15 +184,13 @@ class SheshaInstaller:
             "script_path": None,
         }
         
-        # Check if this is a simple script (no deps, single .py file)
+        # Check if this is a simple script (no deps, single or selectable .py/.sh files)
         if not discovery["python_project"] and not discovery["npm_project"]:
-            py_files = list(self.project_root.glob("*.py"))
-            if len(py_files) == 1:
-                script_file = py_files[0]
-                # Exclude installer scripts themselves
-                if script_file.name not in ["install.py", "uninstall.py", "audit.py", "verify.py"]:
-                    discovery["simple_script"] = True
-                    discovery["script_path"] = script_file
+            script_file = self.resolve_entry_point()
+            if script_file:
+                discovery["simple_script"] = True
+                discovery["script_path"] = script_file
+                self.register_artifact(script_file, executable=True)
         
         self.log(f"Discovered: {', '.join([k for k, v in discovery.items() if v and k not in ['script_path']])} ")
         return discovery
@@ -125,7 +214,7 @@ class SheshaInstaller:
                     text=True
                 )
                 self.log(f"Virtual environment created at {venv_path}")
-                self.artifacts.append(str(venv_path))
+                self.register_artifact(venv_path)
             except subprocess.TimeoutExpired:
                 self.error("Timeout: Virtual environment creation took longer than 1 minute.")
                 sys.exit(1)
@@ -188,7 +277,7 @@ class SheshaInstaller:
                 capture_output=True,
                 text=True
             )
-            self.artifacts.append(str(gui_path / "node_modules"))
+            self.register_artifact(gui_path / "node_modules")
             self.log("npm dependencies installed successfully.")
         except subprocess.TimeoutExpired:
             self.error("Timeout: npm install took longer than 5 minutes")
@@ -292,6 +381,7 @@ fi
         
         install_sh.write_text(wrapper_content)
         install_sh.chmod(0o755)
+        self.register_artifact(install_sh, executable=True)
         self.log(f"Created install.sh wrapper at {install_sh}")
         return install_sh
 
@@ -413,7 +503,7 @@ requires-python = ">=3.6"
                     "command": "python",
                     "args": [str(bridge_path)]
                 }
-                self.artifacts.append(str(bridge_path))
+                self.register_artifact(bridge_path, executable=True)
         else:
             # Check if project already has an MCP server
             # Look for common patterns: mcp_server.py, librarian mcp, package.json with mcp script
@@ -514,7 +604,7 @@ requires-python = ">=3.6"
         with rc_file.open("a", encoding="utf-8") as handle:
             handle.write(block)
         
-        self.artifacts.append(str(rc_file)) # Track that we modified this file
+        self.register_artifact(rc_file) # Track that we modified this file
         self.log(f"Added to PATH in {rc_file}")
 
     def update(self):
@@ -603,7 +693,7 @@ requires-python = ">=3.6"
                 cmd.extend(["--attach-to"] + self.args.attach_to)
             
             subprocess.run(cmd, cwd=engine_dir, check=True)
-            self.artifacts.append(str(engine_dir))
+            self.register_artifact(engine_dir)
             return True
         return False
 
@@ -615,16 +705,20 @@ requires-python = ">=3.6"
         if not self.args.headless and not sys.stdin.isatty():
             self.error("Interactive mode requires a TTY. Use --headless for automated install.")
 
-        audit = self.auditor.audit()
+        # 0. Pre-flight
+        self.pre_flight_checks()
         
-        # Hard requirement check
-        py_major, py_minor = map(int, audit.python_version.split('.'))
-        if (py_major, py_minor) < (3, 11):
-            self.log(f"WARNING: Python {audit.python_version} detected. Most Shesha/MCP projects require 3.11+.")
-            if self.args.docker_policy == "fail":
-                self.error("Python version incompatible.")
+        try:
+            audit = self.auditor.audit()
+            
+            # Hard requirement check
+            py_major, py_minor = map(int, audit.python_version.split('.'))
+            if (py_major, py_minor) < (3, 11):
+                self.log(f"WARNING: Python {audit.python_version} detected. Most Shesha/MCP projects require 3.11+.")
+                if self.args.docker_policy == "fail":
+                    self.error("Python version incompatible.")
 
-        discovery = self.discover_project()
+            discovery = self.discover_project()
         
         # Handle simple scripts (Philosophy: not every repo is a product)
         if discovery["simple_script"]:

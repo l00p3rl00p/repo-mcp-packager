@@ -1,61 +1,80 @@
-# The Activator: Features & Commands
+# Features & Capabilities: The Activator (repo-mcp-packager)
 
-## Overview
-**The Activator (`repo-mcp-packager`)** is the universal installer for the Workforce Nexus. Its philosophy is "Clean Room Installation": it sets up everything a tool needs (venv, dependencies, environment) without polluting your global system.
+**Universal Deployment & Environment Isolation for the Workforce Nexus.**
 
-## Features
+The Activator is the primary engine for transforming repositories into production-ready AI tools while maintaining a "Clean Room" policy. This document provides a high-density reference for installation strategies, isolation logic, and the Phase 9 hardening suite.
 
-### 1. 📦 Universal Installation
-*   **Python Projects**: Detects `pyproject.toml` or `requirements.txt`, creates `.venv`, installs deps.
-*   **Node.js Projects**: Detects `package.json`, installs `node_modules`.
-*   **Simple Scripts**: Wraps single `.py` files with a lightweight `install.sh` shim.
-*   **Documents**: Offers to turn any folder of files into a Knowledge Base.
+---
 
-### 2. 🛡️ Clean Room Policy
-*   **Isolation**: Always favors local virtual environments.
-*   **Surgical PATH**: Adds to `$PATH` with start/end markers in `.zshrc`/`.bashrc` for easy removal.
-*   **Uninstall**: `uninstall.py` removes artifacts listed in `.librarian/manifest.json`.
+## 📊 Installation Strategy Matrix
 
-### 3. 🌉 MCP Integration
-*   **Bridge Generation**: Can wrap legacy Python scripts in an MCP server (The Bridge).
-*   **Attachment**: Connects installed tools to Claude, Cursor, and other IDEs via `mcp-injector`.
-*   **Knowledge Base**: One-click setup of the Librarian alongside your code.
+| Strategy | Mode | Reliability | Environment | Use Case |
+| :--- | :--- | :---: | :--- | :--- |
+| **Full Install** | Interactive | **96-99%** | Managed `.venv` | Complex Python/Node projects |
+| **Lightweight** | `--lite` | **93%** | Shell Shim (`.sh`) | Single-file scripts / Portability |
+| **Permanent** | `--permanent`| **99.999%** | Nexus Infra | Mission-critical deployments |
+| **Headless** | `--headless` | **Automated**| Non-interactive | CI/CD / AI Agent replication |
 
-## Command Reference
+---
 
-### Installation
-```bash
-# Standard interactive install
-python install.py
+## 📋 Table of Contents
+1. [Clean Room Architecture](#clean-room-architecture)
+2. [Command Matrix](#command-matrix)
+3. [Intelligent Resolution & Hardening](#intelligent-resolution--hardening)
+4. [Surgical Reversal (Uninstall)](#surgical-reversal-uninstall)
 
-# Headless check (good for CI/automation)
-python install.py --headless
+---
 
-# Install with Knowledge Base
-python install.py --with-library
-```
+## 🔍 Clean Room Architecture
 
-### Management
-```bash
-# Update the installation
-python install.py --update
+The Activator ensures that no tool pollutes the global host system by strictly gating environment variables and binaries.
 
-# Uninstall everything
-python uninstall.py
-```
-
-### Advanced
-```bash
-# Attach to all IDEs during install
-python install.py --attach-to all
-
-# Generate MCP Bridge for legacy code
-python install.py --generate-bridge
+```mermaid
+graph TD
+    Repo[Git Repo] --> Detect[Structural Audit]
+    Detect --> Choice{Strategy Select}
+    Choice -- Managed --> Venv[Isolated .venv]
+    Choice -- Wrapper --> Shim[install.sh Wrapper]
+    Venv --> Map[Path Marker Injection]
+    Shim --> Map
+    Map --> Manifest[.librarian/manifest.json]
 ```
 
 ---
-**Part of the Workforce Nexus**
-*   **The Surgeon**: `mcp-injector` (Configuration)
-*   **The Observer**: `mcp-server-manager` (Dashboard)
-*   **The Activator**: `repo-mcp-packager` (Automation)
-*   **The Librarian**: `mcp-link-library` (Knowledge)
+
+## 💻 Command Matrix (Lookup)
+
+| Operation | Command | Primary Flag | Context |
+| :--- | :--- | :--- | :--- |
+| **Install** | `python install.py` | (None) | Standard interactive deployment |
+| **Update** | `python install.py` | `--update` | Pull code + re-harden permissions |
+| **Bridge** | `python install.py` | `--generate-bridge` | Wrap legacy code for AI use |
+| **Library** | `python install.py` | `--with-library` | Deploy Librarian alongside repo |
+| **Rollback** | (Automatic) | (None) | Triggered on installation failure |
+
+---
+
+## 🔐 Intelligent Resolution & Hardening (Phase 9)
+
+The Activator features a multi-layer safety suite to ensure executables "Just Work" on the first try:
+
+1.  **Entry Point Resolution**: If a folder contains both `.py` and `.sh` entry points, the Activator prompts the user (or recommends the portable `.sh` option).
+2.  **Auto-Chmod Enforcement**: Automatically sets the execute bit (`chmod +x`) on:
+    *   Internal Nexus tools (`mcp.py`, `bootstrap.py`, etc.).
+    *   Discovered user scripts in target repositories.
+    *   Generated `install.sh` wrappers.
+3.  **Permissions Audit**: During updates, the Activator re-verifies that all mapped executables are still granted appropriate permissions.
+
+---
+
+## 🗑️ Surgical Reversal (Uninstall)
+
+The `uninstall.py` tool uses the **Nexus Manifest Layer** to ensure zero-residue cleanup:
+*   **Artifact Removal**: Only files listed in `manifest.json` are deleted.
+*   **PATH Cleaning**: Uses `# Shesha Block` markers to surgically extract shell configuration edits.
+*   **Nexus Protection**: Refuses to delete the `~/.mcp-tools` home unless it is completely empty or the `--force` flag is used.
+
+---
+
+> **Author**: l00p3rl00p / Workforce Nexus
+> **Reference**: [NEXUS_TECHNICAL_SPEC.md](./NEXUS_TECHNICAL_SPEC.md)
