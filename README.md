@@ -1,44 +1,62 @@
-# Git Repo and Git Repo MCP Converter and Installer
- This directory provides a "Just Works" installation experience for human operators and automated agents, ensuring a clean and isolated environment across any repository fork.
+# Git Repo MCP Converter & Installer
 
- ## Convert any REPO into an MPC server (with options)
+**A "Just Works" installation experience for converting any repository into an MCP-ready toolset.**
 
-* installs any ".sh" file with option (see below)
-* Installs any git repo
-* Installs any git repo as a MCP server
-  * if run with https://github.com/l00p3rl00p/mcp-injector/  in root it i also injects the MCP config files into common areas
- 
+`repo-mcp-packager` provides automation for installing, packaging, and bridging existing code as MCP servers. It ensures clean, isolated environments across any repository fork.
 
+---
 
- 
-## 🚀 Quick Start (60s)
-## Quick Start
+## ⚡ Quick Start (60s)
 
-### Bootstrap the Workspace (Recommended)
-
+### 1. Bootstrap Workspace
+The recommended way to get started is by bootstrapping the full Git-Packager workspace:
 ```bash
 python bootstrap.py
 ```
 
-This will check for and optionally fetch the other Git-Packager components (`mcp-injector`, `mcp-server-manager`) to enable the full suite of functionality.
-
-### Manual Installation
-
+### 2. Manual Installation
+Alternatively, run the installer directly in any repository:
 ```bash
 python serverinstaller/install.py
 ```
 
-## 🛠 Features
+---
 
-- **Portability**: Standalone directory. Bootstraps from host tools and local workspace.
-- **Inventory Awareness**: Scans for Python, Node, and Docker; offers selective installation.
-- **Surgical Reversal**: Clean uninstall including marker-aware shell configuration cleanup.
-- **Wide compatibility**: Logic hardened for Python 3.9+ environments.
-- **MCP Bridge**: Wrap legacy code as MCP servers and auto-attach to IDEs.
+## 📋 Table of Contents
 
-## 🌉 MCP Bridge (New!)
+1. [Overview](#-overview)
+2. [Features](#-features)
+3. [MCP Bridge](#-mcp-bridge)
+4. [Design Philosophy](#-design-philosophy)
+5. [Key Arguments](#-key-arguments)
+6. [Documentation](#-documentation)
+7. [Git-Packager Workspace](#-git-packager-workspace)
+8. [Contributing](#-contributing)
+9. [License](#-license)
 
-**Turn any code into AI-accessible tools:**
+---
+
+## 🔍 Overview
+
+This project implements a portal installer that converts any repository into an MCP server. It is designed to be "entry point agnostic," meaning you can drop the `/serverinstaller` directory into any codebase and it will intelligently detect the environment and offer a clean path to deployment.
+
+The converter handles Python, Node, and Docker services, providing a surgical reversal (uninstall) that leaves the host system exactly as it was found.
+
+---
+
+## 🌟 Features
+
+* **Portability**: Standalone directory that bootstraps from host tools.
+* **Inventory Awareness**: Probes and identifies components (Python, Node, Docker) automatically.
+* **Surgical Reversal**: Marker-aware cleanup of Path and shell configurations.
+* **MCP Bridge**: Converts legacy automation scripts into AI-accessible MCP tools.
+* **Headless Mode**: Zero-touch replication for automated agents.
+
+---
+
+## 🌉 MCP Bridge
+
+**Turn any legacy code into AI-accessible tools instantly:**
 
 ```bash
 # Attach existing MCP server to your IDEs
@@ -51,42 +69,20 @@ python install.py --generate-bridge --attach-to claude
 python attach.py --detect
 ```
 
-See [Walkthrough](../../../.gemini/antigravity/brain/bf0a76d8-2b11-4080-94bb-966b65692a6b/walkthrough.md) for details.
+The bridge generator scans your scripts for execution blocks and creates a wrapper that exposes functions as MCP tools.
 
-## 📖 Documentation
-
-- [USER_OUTCOMES.md](./USER_OUTCOMES.md): Why we built this and how we measure success.
-- [ARCHITECTURE.md](./ARCHITECTURE.md): Technical logic, modular scripts, and developer workflow.
-- [ENVIRONMENT.md](./ENVIRONMENT.md): Environment requirements, audit logic, and policies.
-- [CHANGELOG.md](./CHANGELOG.md): History of improvements and fixes.
+---
 
 ## 💡 Philosophy: Not Every Repo Is a Product
 
-The installer understands that **not every directory with code needs to be a full-blown installable package.**
-
-### The Spectrum of Code
-```
-Simple Script ─────────── Tool ─────────── Full Product
-mcp_injector.py      Shesha CLI      Shesha RLM (Server + GUI)
-```
-
-When you run `python serverinstaller/install.py`, the installer **detects** what kind of repo it's in:
-
-**Simple Script Detected:**
-```
-Options:
-  1. Create install.sh wrapper (lightweight, recommended)
-  2. Package as full Python project (pyproject.toml + .venv)
-  3. Exit (leave as-is)
-```
-
-**Design Principles:**
-- **Respect Minimalism**: Don't force a `.venv` on a script that doesn't need one
-- **Offer Transition Paths**: Simple scripts can be "upgraded" to full packages later
-- **Enable Portability**: Whether it's a `.sh` wrapper or full package, the result is copy-pasteable
+The installer understands that code exists on a spectrum. It respects minimalism:
+* **Respect Minimalism**: Don't force a `.venv` on a script that doesn't need one.
+* **Offer Transition Paths**: Simple scripts can be "upgraded" to full packages later.
+* **Enable Portability**: Whether it's a `.sh` wrapper or a full package, the result should be copy-pasteable.
 
 > *"The best installer is the one that knows when to do nothing."*
 
+---
 
 ## ⚙️ Key Arguments
 
@@ -97,31 +93,21 @@ Options:
 | `--npm-policy {local,global,auto}` | Control Node/NPM isolation. |
 | `--docker-policy {skip,fail}` | Define behavior if Docker is missing. |
 
-## 🔌 MCP JSON Injector Integration
-
-**Add automatic MCP config file management to this project.**
-
-Get the [MCP Injector](https://github.com/l00p3rl00p/mcp-injector/) and drop it in the root of this repository to enable:
-- **Auto-update** MCP config files across all supported IDEs
-- **Safe configuration** with automatic backup and JSON validation
-- **Interactive setup** for adding/removing MCP servers
-
-```bash
-# Once mcp_injector.py is in the root:
-python mcp_injector.py --client claude --add    # Interactive mode
-python mcp_injector.py --list-clients           # Show all IDE locations
-```
-
-This integration enables the installer to automatically configure MCP servers in Claude, Xcode, and other supported IDEs without manual JSON editing.
-
 ---
-**Status**: Production-ready for agent-driven replication.
+
+## 📚 Documentation
+
+Detailed documentation is available in the following files:
+* [USER_OUTCOMES.md](./USER_OUTCOMES.md): Mission statement and success criteria.
+* [ARCHITECTURE.md](./ARCHITECTURE.md): Technical logic and internal modular design.
+* [ENVIRONMENT.md](./ENVIRONMENT.md): Requirements and audit logic.
+* [CHANGELOG.md](./CHANGELOG.md): History of improvements.
 
 ---
 
-## 🤝 Better Together: Git-Packager Workspace
+## 🤝 Git-Packager Workspace
 
-This tool is the **orchestrator** of the Git-Packager workspace:
+This tool acts as the **orchestrator** for the complete suite:
 
 | Tool | Purpose |
 |------|--------|
@@ -129,18 +115,23 @@ This tool is the **orchestrator** of the Git-Packager workspace:
 | **mcp-server-manager** | Discover and track MCP servers across your system |
 | **repo-mcp-packager** (this tool) | Install and package MCP servers with automation |
 
-### Standalone vs. Integrated
+### Integrated Benefits
+* **mcpinv-bootstrap**: Native support for fetching and aligning all 3 tools.
+* **Validation**: Automatically validates server health after installation.
 
-- **Standalone**: Works perfectly for installing individual MCP servers.
-- **Integrated**: The full workspace provides:
-  - Automatic IDE configuration via `mcp-injector`
-  - Server discovery and tracking via `mcp-server-manager`
-  - One-command workspace setup via `python bootstrap.py`
+---
 
-### Bootstrap the Complete Workspace
+## 🤝 Contributing
 
-```bash
-python bootstrap.py
-```
+We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
-This checks for missing Git-Packager components and offers to fetch them from GitHub, giving you the complete suite of tools.
+---
+
+## 📝 License
+
+This project is open-source. See LICENSE for details.
+
+---
+
+## 🏁 Status
+**Production-ready** for agent-driven replication.

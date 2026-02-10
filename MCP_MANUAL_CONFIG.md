@@ -1,22 +1,46 @@
 # Manual MCP Server Configuration Guide
 
-**When to use this**: If the installer can't auto-attach, or you want to manually add an MCP server to your IDE.
+This guide provides step-by-step instructions on how to manually add an MCP server to your IDE if the automated installer cannot be used.
 
 ---
 
-## Step 1: Find Your Config File
+## 📋 Table of Contents
+
+1. [Prerequisites](#-prerequisites)
+2. [Step 1: Find Your Config File](#-step-1-find-your-config-file)
+3. [Step 2: Check Existing Config](#-step-2-check-existing-config)
+4. [Step 3: Add Your Server](#-step-3-add-your-server)
+5. [Step 4: Common Server Templates](#-step-4-common-server-templates)
+6. [Step 5: Validate Your JSON](#-step-5-validate-your-json)
+7. [Verification & Troubleshooting](#-verification--troubleshooting)
+
+---
+
+## 🔍 Prerequisites
+
+* Access to your machine's filesystem.
+* A text editor (VS Code, Cursor, or even TextEdit).
+* Basic understanding of JSON structure (or just follow the templates below).
+
+---
+
+## 📂 Step 1: Find Your Config File
+
+Different IDEs store their MCP configurations in specific locations.
 
 | IDE | Config File Location (macOS) |
 |-----|------------------------------|
 | **Xcode 26.3** | `~/Library/Developer/Xcode/UserData/MCPServers/config.json` |
-| **Codex App** | `~/Library/Application Support/Codex/mcp_servers.json` |
 | **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Codex App** | `~/Library/Application Support/Codex/mcp_servers.json` |
 | **Cursor** | `~/.cursor/mcp.json` |
 | **VS Code** | `~/.vscode/mcp_settings.json` |
 
 ---
 
-## Step 2: Check If File Exists
+## 🔍 Step 2: Check Existing Config
+
+Before editing, see if the file already exists and what it contains.
 
 **Open Terminal and run:**
 ```bash
@@ -24,8 +48,8 @@
 cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-### Scenario A: File is Empty or Doesn't Exist
-Start with this template:
+### Case A: File is Empty or New
+If the file doesn't exist, you'll start with this base structure:
 ```json
 {
   "mcpServers": {
@@ -52,9 +76,11 @@ You'll see something like:
 
 ---
 
-## Step 3: Add Your New Server (The Tricky Part)
+## 🛠 Step 3: Add Your Server
 
-### ✅ CORRECT: Adding a Second Server
+This is where most mistakes happen. Follow the "Comma Rule" strictly.
+
+### ✅ Adding a Second Server
 
 **BEFORE (one server):**
 ```json
@@ -84,10 +110,9 @@ You'll see something like:
 }
 ```
 
-**Key Rules:**
-1. Add a **comma** after the closing `}` of the previous entry
-2. NO comma after the last entry
-3. Keep the same indentation level
+> **The Golden Rules of JSON:**
+> 1. Add a **comma** `,` after every entry EXCEPT the last one in a list or object.
+> 2. Ensure every opening `{` or `[` has a matching closing `}` or `]`.
 
 ---
 
@@ -124,7 +149,7 @@ You'll see something like:
 
 ---
 
-## Step 5: Validate Your JSON
+## ✅ Step 5: Validate Your JSON
 
 **Common Mistakes:**
 
@@ -160,10 +185,10 @@ You'll see something like:
 
 **Validation Tool:**
 ```bash
-# Check if your JSON is valid
 cat ~/path/to/config.json | python3 -m json.tool
 ```
-If you see an error, the JSON is broken. If it prints the formatted JSON, you're good!
+* **Success**: It prints the formatted JSON.
+* **Failure**: It shows a `JSONDecodeError`. Fix the syntax before proceeding.
 
 ---
 

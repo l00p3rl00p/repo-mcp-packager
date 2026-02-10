@@ -1,28 +1,54 @@
 # Shesha Clean Room Installer
 
-The portable wavefront for Shesha RLM. This directory provides a "Just Works" installation experience for human operators and automated agents, ensuring a clean and isolated environment across any repository fork.
+**The portable wavefront for Git-Packager. High-precision installation, isolation, and bridging.**
 
-## 🚀 Quick Start (60s)
+This directory provides a "Just Works" installation experience for human operators and automated agents, ensuring a clean and isolated environment across any repository fork.
 
-To install headlessly (for agents/CI):
+---
+
+## ⚡ Quick Start (60s)
+
+### 1. Installation (Headless)
+For agents and CI/CD:
 ```bash
-python serverinstaller/install.py --headless
+python install.py --headless
 ```
 
-To install selectively (guided inventory):
+### 2. Installation (Guided)
+For human operators:
 ```bash
-python serverinstaller/install.py
+python install.py
 ```
 
-## 🛠 Features
+---
 
-- **Portability**: Standalone directory. Bootstraps from host tools and local workspace.
-- **Inventory Awareness**: Scans for Python, Node, and Docker; offers selective installation.
-- **Surgical Reversal**: Clean uninstall including marker-aware shell configuration cleanup.
-- **Wide compatibility**: Logic hardened for Python 3.9+ environments.
-- **MCP Bridge**: Wrap legacy code as MCP servers and auto-attach to IDEs.
+## 📋 Table of Contents
 
-## 🌉 MCP Bridge (New!)
+1. [Overview](#-overview)
+2. [Features](#-features)
+3. [MCP Bridge](#-mcp-bridge)
+4. [Design Philosophy](#-design-philosophy)
+5. [Key Arguments](#-key-arguments)
+6. [Documentation](#-documentation)
+
+---
+
+## 🔍 Overview
+
+The Shesha Clean Room Installer is a standalone directory that can be dropped into any project codebase. It intelligently probes the host system, identifies available components (Python, Node, Docker), and allows for elective installation with automated environment configuration.
+
+---
+
+## 🌟 Features
+
+* **Portability**: Standalone directory. Bootstraps from host tools and local workspace.
+* **Inventory Awareness**: Scans for Python, Node, and Docker; offers selective installation.
+* **Surgical Reversal**: Marker-aware shell configuration cleanup in `uninstall.py`.
+* **Wide compatibility**: Logic hardened for Python 3.9+ environments.
+
+---
+
+## 🌉 MCP Bridge
 
 **Turn any code into AI-accessible tools:**
 
@@ -32,19 +58,11 @@ python install.py --attach-to all
 
 # Wrap legacy script + attach to Claude
 python install.py --generate-bridge --attach-to claude
-
-# Detect available IDEs
-python attach.py --detect
 ```
 
-See [Walkthrough](../../../.gemini/antigravity/brain/bf0a76d8-2b11-4080-94bb-966b65692a6b/walkthrough.md) for details.
+The bridge generator creates an `mcp_server.py` wrapper that exposes your script's functions as MCP tools.
 
-## 📖 Documentation
-
-- [USER_OUTCOMES.md](./USER_OUTCOMES.md): Why we built this and how we measure success.
-- [ARCHITECTURE.md](./ARCHITECTURE.md): Technical logic, modular scripts, and developer workflow.
-- [ENVIRONMENT.md](./ENVIRONMENT.md): Environment requirements, audit logic, and policies.
-- [CHANGELOG.md](./CHANGELOG.md): History of improvements and fixes.
+---
 
 ## 💡 Philosophy: Not Every Repo Is a Product
 
@@ -73,6 +91,7 @@ Options:
 
 > *"The best installer is the one that knows when to do nothing."*
 
+---
 
 ## ⚙️ Key Arguments
 
@@ -105,3 +124,12 @@ See [MCP_INJECTOR_README.md](../MCP_INJECTOR_README.md) for details.
 For this to work really well, we recommmden usind mcp-injector_install.sh to install the MCP injector. This will create a mcp-inject binary in your PATH. This will allow you to add MCP servers to any IDE config file. 
 
 THis is located at the repo https://github.com/l00pe3mcp-injector
+
+---
+
+## 📚 Documentation
+
+* [USER_OUTCOMES.md](./USER_OUTCOMES.md): Mission and success metrics.
+* [ARCHITECTURE.md](./ARCHITECTURE.md): Technical logic and developer workflow.
+* [ENVIRONMENT.md](./ENVIRONMENT.md): Requirements and audit logic.
+* [CHANGELOG.md](./CHANGELOG.md): History of fixes.
