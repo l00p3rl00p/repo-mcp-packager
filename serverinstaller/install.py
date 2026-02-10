@@ -8,6 +8,8 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
+__version__ = "0.1.0"
+
 # Ensure we can import from the same directory
 sys.path.append(str(Path(__file__).parent))
 from audit import EnvironmentAuditor
@@ -67,29 +69,62 @@ class SheshaInstaller:
         """Ensure we are in or create a virtual environment."""
         if sys.prefix != sys.base_prefix:
             self.log("Already running in a virtual environment.")
+            # We are already in a venv, no need to create or activate
             return
 
         venv_path = self.project_root / ".venv"
         if not venv_path.exists():
-            self.log(f"Creating virtual environment at {venv_path}...")
-            subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
-            self.artifacts.append(str(venv_path))
+            self.log("Creating virtual environment...")
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "venv", str(venv_path)],
+                    check=True,
+                    timeout=60,  # 1 minute timeout for venv creation
+                    capture_output=True,
+                    text=True
+                )
+                self.log(f"Virtual environment created at {venv_path}")
+                self.artifacts.append(str(venv_path))
+            except subprocess.TimeoutExpired:
+                self.error("Timeout: Virtual environment creation took longer than 1 minute.")
+                sys.exit(1)
+            except subprocess.CalledProcessError as e:
+                self.error(f"Failed to create virtual environment: {e.stderr}")
+                self.error("Hint: Ensure Python venv module is available and your system has enough resources.")
+                sys.exit(1)
+        else:
+            self.log(f"Virtual environment already exists at {venv_path}")
         
         self.log(f"Virtual environment ready. Please activate it before continuing.")
         if not self.args.headless:
             self.log(f"Command: source {venv_path}/bin/activate")
 
     def install_python_deps(self, discovery: Dict[str, Any]):
-        if discovery["python_project"]:
-            self.log("Installing Python dependencies (local source)...")
-            cmd = [sys.executable, "-m", "pip", "install", "-e", "."]
-            if discovery["npm_project"]:
-                cmd = [sys.executable, "-m", "pip", "install", "-e", ".[dev]"]
+        if discovery.get("has_requirements"):
+            self.log("Installing Python dependencies from requirements.txt...")
+            pip_path = self.project_root / ".venv" / "bin" / "pip"
+            if pip_path.exists():
+                cmd = [str(pip_path), "install", "-r", "requirements.txt"]
+            else:
+                cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
             try:
-                subprocess.run(cmd, cwd=self.project_root, check=True, capture_output=True, text=True)
+                subprocess.run(
+                    cmd,
+                    cwd=self.project_root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout for pip install
+                )
+                self.log("Python dependencies installed successfully.")
+            except subprocess.TimeoutExpired:
+                self.error("Timeout: pip install took longer than 5 minutes")
+                self.error("Hint: Check your network connection or try again")
+                sys.exit(1)
             except subprocess.CalledProcessError as e:
-                self.log(f"Warning: pip install failed. This is expected if external dependencies are missing or Python version is incompatible.")
-                self.log(f"Error: {e.stderr}")
+                self.error(f"Failed to install Python dependencies: {e.stderr}")
+                self.error("Hint: Check requirements.txt for invalid packages")
+                sys.exit(1)
 
     def setup_npm(self, discovery: Dict[str, Any]):
         if not discovery["gui_project"]:
@@ -104,10 +139,28 @@ class SheshaInstaller:
         
         self.log(f"Running npm install in {gui_path}...")
         try:
-            subprocess.run(["npm", "install"], cwd=gui_path, check=True)
+            subprocess.run(
+                ["npm", "install"],
+                cwd=gui_path,
+                check=True,
+                timeout=300,  # 5 minute timeout for npm install
+                capture_output=True,
+                text=True
+            )
             self.artifacts.append(str(gui_path / "node_modules"))
-        except Exception as e:
-            self.log(f"Warning: npm install failed: {e}")
+            self.log("npm dependencies installed successfully.")
+        except subprocess.TimeoutExpired:
+            self.error("Timeout: npm install took longer than 5 minutes")
+            self.error("Hint: Check your network connection or try again")
+            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            self.error(f"Failed to install npm dependencies: {e.stderr}")
+            self.error("Hint: Check package.json for invalid packages")
+            sys.exit(1)
+        except FileNotFoundError:
+            self.error("npm not found. Please install Node.js and npm")
+            self.error("Install: brew install node (macOS) or apt-get install nodejs npm (Linux)")
+            sys.exit(1)
 
     def write_manifest(self, audit: Dict[str, Any]):
         manifest_dir = self.project_root / ".librarian"
