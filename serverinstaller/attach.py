@@ -46,23 +46,33 @@ class AttachmentResult:
     error: Optional[str] = None
 
 
-def detect_clients() -> Dict[str, Path]:
+def detect_clients(custom_paths: Optional[Dict[str, str]] = None) -> Dict[str, Path]:
     """
     Detect which MCP-compatible IDEs are installed.
     
+    Args:
+        custom_paths: Optional dict of {name: path} from global config
+    
     Returns:
         Dict mapping client name to config file path
-        Example: {"claude": Path("~/Library/.../claude_desktop_config.json")}
     """
     if not INJECTOR_AVAILABLE:
         print("⚠️  MCPInjector not available. Cannot detect clients.")
         return {}
     
     found = {}
-    for name, config_path_str in KNOWN_CLIENTS.items():
+    
+    # 1. Start with known locations
+    targets = KNOWN_CLIENTS.copy()
+    
+    # 2. Overlay custom paths if provided
+    if custom_paths:
+        for name, path in custom_paths.items():
+            targets[name] = path
+            
+    for name, config_path_str in targets.items():
         config_path = Path(config_path_str).expanduser()
         if config_path.exists() or config_path.parent.exists():
-            # Include if config exists OR parent dir exists (we can create config)
             found[name] = config_path
     
     return found
@@ -71,23 +81,17 @@ def detect_clients() -> Dict[str, Path]:
 def attach_to_clients(
     server_config: Dict[str, Any],
     client_names: Optional[List[str]] = None,
-    interactive: bool = True
+    interactive: bool = True,
+    custom_paths: Optional[Dict[str, str]] = None
 ) -> List[AttachmentResult]:
     """
     Attach MCP server to one or more IDE configs.
     
     Args:
-        server_config: {
-            "name": "server-name",
-            "command": "npx",
-            "args": ["-y", "package-name"],
-            "env": {"KEY": "value"}  # optional
-        }
-        client_names: List of clients to attach to, or None for all detected
-        interactive: If True, prompt before each attachment
-    
-    Returns:
-        List of AttachmentResult objects
+        server_config: Server details
+        client_names: Specific clients to target
+        interactive: Prompt before action
+        custom_paths: Custom config paths (e.g. from Nexus registry)
     """
     if not INJECTOR_AVAILABLE:
         print("❌ MCPInjector not available. Cannot attach to clients.")
@@ -95,7 +99,7 @@ def attach_to_clients(
         return []
     
     # Detect available clients
-    available_clients = detect_clients()
+    available_clients = detect_clients(custom_paths)
     
     if not available_clients:
         print("⚠️  No MCP-compatible IDEs detected.")

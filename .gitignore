@@ -1,34 +1,157 @@
-# macOS
+# macOS Specific
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
 
+# Dependencies
+node_modules/
+mcp-link-library/
+Thumbs.db
+
+# IDE and Editor Directories
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+.eclipse
+.netbeans
+.cproject
+.buildpath
+
+# Compiled Source
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and Databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+logs/
+log/
+
+# Dependency Directories
+node_modules/
+bower_components/
+jspm_packages/
+vendor/
+.npm
+.pnp
+.pnp.js
+
+# Build Outputs
+dist/
+build/
+out/
+target/
+*.build/
+*.bundle
+*.compiled
+
+# Environment Files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+
+# Package Management
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing and Coverage
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+htmlcov/
+.hypothesis/
+.benchmarks
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Temporary Files
+*.bak
+*.tmp
+*.temp
+
+# Language-Specific Ignores
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
 
-# Virtual environments
-venv/
-.venv/
-ENV/
-env/
+# JavaScript/Node
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Java
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
 
-# Installation artifacts
-.librarian/
+# C/C++
+*.a
+*.out
+*.app
 
-# Backups
-*.backup
+# Go
+*.test
+*.prof
+
+# Ruby
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg/
+/spec/reports/
+/spec/examples.txt
+
+# Terraform
+.terraform
+*.tfstate
+*.tfstate.*
+.terragrunt-cache
+
+# Miscellaneous
+.project
+.metadata
+*.iml
+local.properties

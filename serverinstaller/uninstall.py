@@ -14,10 +14,16 @@ try:
 except ImportError:
     MCP_REMOVAL_AVAILABLE = False
 
+def get_mcp_tools_home():
+    if sys.platform == "win32":
+        return Path(os.environ['USERPROFILE']) / ".mcp-tools"
+    return Path.home() / ".mcp-tools"
+
 class SheshaUninstaller:
-    def __init__(self, project_root: Path, kill_venv: bool = False):
+    def __init__(self, project_root: Path, kill_venv: bool = False, purge_data: bool = False):
         self.project_root = project_root
         self.kill_venv = kill_venv
+        self.purge_data = purge_data
         self.manifest_path = self.project_root / ".librarian" / "manifest.json"
 
     def log(self, msg: str):
@@ -25,18 +31,20 @@ class SheshaUninstaller:
 
     def run(self):
         if not self.manifest_path.exists():
-            print(f"No installation manifest found at {self.manifest_path}. Aborting.")
-            return
-
-        with open(self.manifest_path, 'r') as f:
-            manifest = json.load(f)
+            print(f"⚠️  No installation manifest found at {self.manifest_path}.")
+            print("   Proceeding with directory clean-up mode (fallback).")
+            manifest = {}
+        else:
+            with open(self.manifest_path, 'r') as f:
+                manifest = json.load(f)
 
         # Remove MCP attachments first (if any)
         if "attached_clients" in manifest:
             self.remove_mcp_attachments(manifest["attached_clients"])
 
         artifacts = manifest.get("install_artifacts", [])
-        self.log(f"Found {len(artifacts)} tracked artifacts for removal.")
+        if artifacts:
+            self.log(f"Found {len(artifacts)} tracked artifacts for removal.")
 
         # 1. Remove tracked artifacts (files/dirs or surgical blocks)
         marker_start = "# Shesha Block START"
@@ -83,10 +91,11 @@ class SheshaUninstaller:
                 self.log(f"Removing file: {path}")
                 path.unlink(missing_ok=True)
 
-        # 2. Cleanup manifest directory
+        # 2. Cleanup manifest directory (if it exists)
         manifest_dir = self.manifest_path.parent
-        self.log(f"Removing manifest directory: {manifest_dir}")
-        shutil.rmtree(manifest_dir, ignore_errors=True)
+        if manifest_dir.exists():
+            self.log(f"Removing manifest directory: {manifest_dir}")
+            shutil.rmtree(manifest_dir, ignore_errors=True)
 
         # 3. Handle Venv
         if self.kill_venv:
@@ -98,6 +107,51 @@ class SheshaUninstaller:
             self.log("Skipping virtual environment removal (use --kill-venv to remove).")
 
         self.log("Uninstall complete. System restored.")
+
+        # 4. Handle Shared Nexus (Lifecycle Management)
+        if self.purge_data:
+            self.remove_nexus(force=True)
+        else:
+            self.remove_nexus(force=False)
+
+    def remove_nexus(self, force: bool = False):
+        """Check if we should remove the shared Nexus root (~/.mcp-tools)."""
+        nexus = get_mcp_tools_home()
+        if not nexus.exists():
+            return
+            
+        if force:
+            self.log(f"🔥 PURGING shared Nexus data at {nexus}...")
+            shutil.rmtree(nexus, ignore_errors=True)
+            return
+
+        # Check for siblings
+        # We expect folders like: mcp-server-manager, mcp-link-library, mcp-injector, repo-mcp-packager
+        siblings = [p for p in nexus.iterdir() if p.is_dir()]
+        
+        # If we are running from INSIDE the nexus, we count as one.
+        # But we already deleted our own folder in step 1 (if manifest was correct).
+        # Let's see what's left.
+        remaining = len(siblings)
+        
+        if remaining > 1:
+            self.log(f"ℹ️  Keeping shared Nexus ({remaining} tools detected).")
+        elif remaining == 1:
+            # Often the last folder is just an empty shell or a config file
+            # Let's ask the user
+            print(f"\n⚠️  You seem to be the last tool standing.")
+            print(f"   Nexus location: {nexus}")
+            print(f"   Contents: {[s.name for s in siblings]}")
+            choice = input(f"   Remove shared Nexus data and config? [y/N]: ").strip().lower()
+            if choice == 'y':
+                self.log(f"Removing shared Nexus: {nexus}")
+                shutil.rmtree(nexus, ignore_errors=True)
+            else:
+                self.log("Keeping shared Nexus.")
+        else:
+            # Empty nexus?
+            self.log("Removing empty Nexus directory.")
+            shutil.rmtree(nexus, ignore_errors=True)
     
     def remove_mcp_attachments(self, attached_clients: list):
         """Remove MCP server entries from IDE configs"""
@@ -123,10 +177,11 @@ class SheshaUninstaller:
 def main():
     parser = argparse.ArgumentParser(description="Shesha Clean Room Uninstaller")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the virtual environment as well")
+    parser.add_argument("--purge-data", action="store_true", help="Force remove shared Nexus data (~/.mcp-tools)")
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent.resolve()
-    uninstaller = SheshaUninstaller(root, kill_venv=args.kill_venv)
+    uninstaller = SheshaUninstaller(root, kill_venv=args.kill_venv, purge_data=args.purge_data)
     uninstaller.run()
 
 if __name__ == "__main__":

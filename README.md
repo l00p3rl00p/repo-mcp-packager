@@ -109,19 +109,21 @@ Detailed documentation is available in the following files:
 
 ---
 
-## 🤝 Git-Packager Workspace
+## 🤝 Git-Packager Workforce Suite
 
-This tool acts as the **orchestrator** for the complete suite:
+This tool is the **Activator (Deployer)** for the complete four-component workforce ecosystem:
 
-| Tool | Purpose |
-| --- | --- |
-| **mcp-injector** | Safely manage MCP server configs in IDE JSON files |
-| **mcp-server-manager** | Discover and track MCP servers across your system |
-| **repo-mcp-packager** (this tool) | Install and package MCP servers with automation |
+| Tool | Persona | Purpose |
+| --- | --- | --- |
+| **mcp-injector** | The Surgeon | Safely manage MCP server configs in IDE JSON files |
+| **mcp-server-manager** | The Observer | Discover, track, and monitor health of all MCP servers |
+| **repo-mcp-packager** | The Activator | Install, package, and update MCP servers with automation |
+| **mcp-link-library** | The Librarian | Curated knowledge base and document engine for AI tools |
 
 ### Integrated Benefits
-* **mcpinv-bootstrap**: Native support for fetching and aligning all 3 tools.
-* **Validation**: Automatically validates server health after installation.
+* **Universal Bootstrapping**: `bootstrap.py` aligns and fetches all 4 tools.
+* **Lifecycle Management**: Automated `install.py --update` pulls code and refreshes knowledge.
+* **Centralized Health**: Manager GUI tracks everything from Docker status to Librarian integrity.
 
 ---
 

@@ -22,6 +22,24 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
+GLOBAL_CONFIG_KEY = "ide_config_paths"
+
+def get_global_config_path():
+    if sys.platform == "win32":
+        return Path(os.environ['USERPROFILE']) / ".mcp-tools" / "config.json"
+    return Path.home() / ".mcp-tools" / "config.json"
+
+def get_global_ide_paths() -> Dict[str, str]:
+    """Retrieve IDE paths from Nexus config"""
+    config_path = get_global_config_path()
+    try:
+        if config_path.exists():
+            data = json.loads(config_path.read_text())
+            return data.get(GLOBAL_CONFIG_KEY, {})
+    except:
+        pass
+    return {}
+
 class SheshaInstaller:
     def __init__(self, args: argparse.Namespace):
         self.args = args
@@ -34,9 +52,30 @@ class SheshaInstaller:
         if not self.args.headless:
             print(f"[*] {msg}")
 
-    def error(self, msg: str):
+    def error(self, msg: str, category: str = "runtime"):
+        """Log error to console and machine-readable logs."""
         print(f"[!] ERROR: {msg}", file=sys.stderr)
+        self.machine_log("error", msg, {"category": category})
         sys.exit(1)
+
+    def machine_log(self, event: str, message: str, data: Optional[Dict[str, Any]] = None):
+        """Emit structured JSON for GUI consumption."""
+        if not self.args.headless and not self.args.machine:
+            return
+            
+        import datetime
+        timestamp = datetime.datetime.now().isoformat()
+        
+        log_entry = {
+            "timestamp": timestamp,
+            "level": "info" if event != "error" else "error",
+            "event": event,
+            "message": message,
+            "data": data or {}
+        }
+        # If machine flag is set, print to stdout (or a specific log file if we had one)
+        if self.args.machine:
+            print(f"JSON_LOG:{json.dumps(log_entry)}")
 
     def discover_project(self) -> Dict[str, Any]:
         """Scan the project root to see what application files are present."""
@@ -48,6 +87,8 @@ class SheshaInstaller:
             "gui_project": (self.project_root / "gui" / "package.json").exists(),
             "docker_project": (self.project_root / "Dockerfile").exists() or 
                              (self.project_root / "src" / "shesha" / "sandbox" / "Dockerfile").exists(),
+            "python_requirements": (self.project_root / "requirements.txt").exists(),
+            "python_setup": (self.project_root / "setup.py").exists(),
             "simple_script": False,
             "script_path": None,
         }
@@ -167,9 +208,21 @@ class SheshaInstaller:
         manifest_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = manifest_dir / "manifest.json"
         
+        # Detect remote URL if it's a git repo
+        remote_url = None
+        try:
+            remote_url = subprocess.check_output(
+                ["git", "config", "--get", "remote.origin.url"],
+                cwd=self.project_root, text=True
+            ).strip()
+        except:
+            pass
+
         manifest_data = {
             "install_date": audit["timestamp"],
             "install_artifacts": self.artifacts,
+            "install_mode": "managed" if self.args.managed else "dev",
+            "remote_url": remote_url,
             "audit_snapshot": audit,
             "version": "0.5.0-portable"
         }
@@ -398,10 +451,14 @@ requires-python = ">=3.6"
         if server_config and self.args.attach_to:
             client_list = None if "all" in self.args.attach_to else self.args.attach_to
             
+            # Merge global config paths if available
+            ide_paths = get_global_ide_paths()
+            
             results = attach_to_clients(
                 server_config,
                 client_names=client_list,
-                interactive=not self.args.headless
+                interactive=not self.args.headless,
+                custom_paths=ide_paths
             )
             
             # Store attachment info in manifest
@@ -437,6 +494,10 @@ requires-python = ">=3.6"
         
         export_line = f'export PATH="{venv_bin.resolve()}:$PATH"'
         
+        # Check if already in PATH
+        if rc_file.exists() and export_line in rc_file.read_text():
+            return
+
         self.log(f"\nOptional: add Shesha to PATH so 'librarian' is available everywhere.")
         self.log(f"  This will modify: {rc_file}")
         self.log(f"  (Markers # Shesha Block START/END will be used for safe reversal)")
@@ -456,7 +517,101 @@ requires-python = ">=3.6"
         self.artifacts.append(str(rc_file)) # Track that we modified this file
         self.log(f"Added to PATH in {rc_file}")
 
+    def update(self):
+        """Update the existing installation."""
+        self.log(f"Checking for updates in {self.project_root}...")
+        self.machine_log("update_start", "Starting update process", {"root": str(self.project_root)})
+        
+        # 1. Verify this is a git repo
+        if not (self.project_root / ".git").exists():
+            self.error("This project is not a git repository. Cannot auto-update.", "validation")
+            
+        # 2. Check for local changes
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=self.project_root, capture_output=True, text=True)
+        if status.stdout.strip():
+            self.log("⚠️  Local changes detected.")
+            if not self.args.headless:
+                choice = input("Update might overwrite changes. Force update anyway? [y/N]: ").strip().lower()
+                if choice != 'y':
+                    self.machine_log("update_aborted", "Update cancelled due to local changes")
+                    self.log("Update aborted.")
+                    return
+        
+        # 3. Perform the pull
+        self.log("Pulling latest changes...")
+        try:
+            subprocess.run(["git", "pull"], cwd=self.project_root, check=True, capture_output=True, text=True)
+            self.log("✅ Code updated successfully.")
+            self.machine_log("git_pull_success", "Code synchronized with remote")
+        except subprocess.CalledProcessError as e:
+            self.error(f"Git Pull Failed: {e.stderr}", "network")
+
+        # 4. Check for library-engine updates
+        engine_dir = self.project_root / "mcp-link-library"
+        if engine_dir.exists() and (engine_dir / ".git").exists():
+            self.log(f"Update detected for child engine: {engine_dir.name}")
+            try:
+                subprocess.run(["git", "pull"], cwd=engine_dir, check=True, capture_output=True, text=True)
+                self.machine_log("engine_update_success", "Library engine updated")
+            except subprocess.CalledProcessError as e:
+                self.machine_log("engine_update_fail", f"Engine update failed: {e.stderr}")
+            
+        # 5. Refresh dependencies
+        discovery = self.discover_project()
+        try:
+            if discovery["python_project"]:
+                self.install_python_deps(discovery)
+                self.machine_log("deps_refresh", "Python dependencies refreshed")
+            if discovery["gui_project"]:
+                self.setup_npm(discovery)
+                self.machine_log("deps_refresh", "NPM dependencies refreshed")
+        except Exception as e:
+            self.error(f"Dependency refresh failed: {str(e)}", "runtime")
+            
+        self.log("✨ All components refreshed and up to date.")
+        self.machine_log("update_complete", "Update finished successfully")
+
+    def handle_knowledge_base(self, discovery: Dict[str, Any]):
+        """Offer to install the Knowledge Base (Librarian) for any project type."""
+        engine_dir = self.project_root / "mcp-link-library"
+        
+        # If already exists, just update/bootstrap quietly if requested
+        if engine_dir.exists():
+            self.log(f"Knowledge Base found at {engine_dir.name}")
+            return True
+            
+        print(f"\n[*] Installing Knowledge Base (mcp-link-library)...")
+        try:
+            subprocess.run(
+                ["git", "clone", "https://github.com/l00p3rl00p/mcp-link-library", str(engine_dir)],
+                check=True
+            )
+        except Exception as e:
+            self.error(f"Failed to clone link library: {e}")
+            return False
+            
+        # Run bootstrap
+        engine_installer = engine_dir / "bootstrap.py"
+        if not engine_installer.exists():
+            engine_installer = engine_dir / "install.py"
+        
+        if engine_installer.exists():
+            print(f"[*] Bootstrapping Knowledge Base...")
+            cmd = [sys.executable, str(engine_installer)]
+            # If we know what IDEs to attach to, pass them along
+            if self.args.attach_to:
+                cmd.extend(["--attach-to"] + self.args.attach_to)
+            
+            subprocess.run(cmd, cwd=engine_dir, check=True)
+            self.artifacts.append(str(engine_dir))
+            return True
+        return False
+
     def run(self):
+        if self.args.update:
+            self.update()
+            return
+
         if not self.args.headless and not sys.stdin.isatty():
             self.error("Interactive mode requires a TTY. Use --headless for automated install.")
 
@@ -476,31 +631,121 @@ requires-python = ">=3.6"
             self.handle_simple_script(discovery)
             return
         
+        # Handle "documents only" projects
+        is_code_project = any([
+            discovery["python_project"],
+            discovery["npm_project"],
+            discovery["gui_project"],
+            discovery["docker_project"],
+            discovery["python_requirements"],
+            discovery["python_setup"]
+        ])
+
+        if not is_code_project and not self.args.generate_bridge:
+            print("\n" + "!"*50)
+            print("📎 DISCOVERY: DOCUMENTS & FOLDERS")
+            print("!"*50)
+            print("\nSeems this is just documents or folders.")
+            print("There are no standard project files (no package.json, pyproject.toml, etc.)")
+            print("detected, so there is nothing to automate or 'install' by default.")
+            print("\nBUT: I can turn this directory into a searchable MCP Knowledge Base")
+            print("by pulling down and configuring the 'mcp-link-library' for you.")
+            
+            if not self.args.headless:
+                print("Options:")
+                print("  [y] Yes, set up MCP server (clones mcp-link-library)")
+                print("  [n] No, keep as-is")
+                print("  [q] Abort installation")
+                
+                choice = input("\nChoice [y/n/q]: ").strip().lower()
+                
+                if choice in ['q', 'n']:
+                    print("\n❎ Skipping setup. You can always use the library later:")
+                    print("   👉 https://github.com/l00p3rl00p/mcp-link-library\n")
+                    sys.exit(0)
+                
+                if choice == 'y':
+                    engine_dir = self.project_root / "mcp-link-library"
+                    if engine_dir.exists():
+                        print(f"[*] Engine directory {engine_dir.name} already exists. Skipping clone.")
+                    else:
+                        print(f"[*] Pulling mcp-link-library into {engine_dir.name}...")
+                        try:
+                            # SECURITY: Use check=True to fail fast on network/git errors
+                            subprocess.run(
+                                ["git", "clone", "https://github.com/l00p3rl00p/mcp-link-library", str(engine_dir)],
+                                check=True
+                            )
+                        except Exception as e:
+                            self.error(f"Failed to clone link library: {e}")
+                    
+                    # Run the engine's installer
+                    engine_installer = engine_dir / "bootstrap.py"
+                    if not engine_installer.exists():
+                        engine_installer = engine_dir / "install.py"
+                    
+                    if engine_installer.exists():
+                        print(f"[*] Bootstrapping the new engine...")
+                        # Run the engine's installer with --attach-to all if possible
+                        cmd = [sys.executable, str(engine_installer)]
+                        if self.args.attach_to:
+                            cmd.extend(["--attach-to"] + self.args.attach_to)
+                        
+                        subprocess.run(cmd, cwd=engine_dir)
+                        print("\n✅ Knowledge Base setup complete!")
+                        sys.exit(0)
+                    else:
+                        self.error("Found the engine but couldn't find its installer (bootstrap.py or install.py).")
+                else:
+                    print("\n❎ Skipping setup. Use https://github.com/l00p3rl00p/mcp-link-library manually if needed.")
+                    sys.exit(0)
+            else:
+                self.log("Headless mode: Skipping auto-scaffold to avoid side-effects. Use manually.")
+                sys.exit(0)
+
         # Component Selection
         install_choices = {
             "python": discovery["python_project"],
             "gui": discovery["gui_project"] and not self.args.no_gui,
+            "knowledge_base": False, 
         }
-        
+
         if not self.args.headless:
             print("\n" + "="*40)
             print("COMPONENT INVENTORY".center(40))
             print("="*40)
+            print(" (Enter 'q' at any prompt to abort)")
+            print("-" * 40)
             
             if discovery["python_project"]:
-                choice = input("Install Python Server/CLI? [Y/n]: ").strip().lower()
+                choice = input("Install Python Server/CLI? [Y/n/q]: ").strip().lower()
+                if choice == 'q': sys.exit(0)
                 install_choices["python"] = choice != 'n'
             
             if discovery["gui_project"]:
-                choice = input("Install GUI Frontend? [Y/n]: ").strip().lower()
+                choice = input("Install GUI Frontend? [Y/n/q]: ").strip().lower()
+                if choice == 'q': sys.exit(0)
                 install_choices["gui"] = choice != 'n'
             
+            # Always offer Knowledge Base
+            choice = input("Install Knowledge Base (Librarian)? [Y/n/q]: ").strip().lower()
+            if choice == 'q': sys.exit(0)
+            install_choices["knowledge_base"] = choice != 'n'
+
+            if not any(install_choices.values()):
+                print("\nNo components selected for installation.")
+                if input("Exit now? [Y/n]: ").strip().lower() != 'n':
+                    sys.exit(0)
+                
             print("="*40 + "\n")
 
         if install_choices["python"]:
             self.setup_venv()
             self.install_python_deps(discovery)
         
+        if install_choices.get("knowledge_base"):
+            self.handle_knowledge_base(discovery)
+            
         if install_choices["gui"]:
             self.setup_npm(discovery)
         
@@ -523,6 +768,9 @@ def main():
     parser.add_argument("--docker-policy", choices=["fail", "skip"], default="skip")
     parser.add_argument("--storage-path", type=Path)
     parser.add_argument("--log-dir", type=Path)
+    parser.add_argument("--machine", action="store_true", help="Emit machine-readable JSON logs to stdout")
+    parser.add_argument("--managed", action="store_true", help="Install into managed library folder")
+    parser.add_argument("--update", action="store_true", help="Update the existing server installation")
     
     # MCP Bridge arguments
     parser.add_argument("--generate-bridge", action="store_true", help="Generate MCP wrapper for legacy code")
