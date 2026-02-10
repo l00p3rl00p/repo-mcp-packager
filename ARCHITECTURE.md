@@ -66,3 +66,28 @@ python serverinstaller/uninstall.py --kill-venv
 - **Local-Only**: Bootstraps from the local repository state only. No remote template fetching.
 - **Permissions**: Guided mode explicitly asks for permission before modifying any host RC files.
 - **Self-Documenting**: Failures in subprocesses (like `pip`) are captured and logged as warnings rather than hard crashes, ensuring the installer completes its audit output.
+
+## Universal Bootstrap & Mutual Discovery
+
+### Philosophy
+
+Each Git-Packager repository can act as a complete workspace installer. This "entry point agnostic" design means:
+- Users can clone any single repo and bootstrap the full workspace from there
+- Each tool remains 100% functional standalone
+- Integration is opt-in via explicit user consent
+
+### Resolution Strategy
+
+The `bootstrap.py` module implements a three-tier resolution:
+
+1. **Local**: Check if component exists in current project root
+2. **Sibling**: Check workspace parent directory for sibling repos
+3. **Remote**: Offer to `git clone` from GitHub if missing
+
+### Integration Points
+
+- **mcp-injector**: `python mcp_injector.py --bootstrap`
+- **mcp-server-manager**: `mcpinv bootstrap`
+- **repo-mcp-packager**: `python bootstrap.py` (native)
+
+All three entry points run the same universal bootstrapper logic.

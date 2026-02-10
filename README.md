@@ -12,13 +12,18 @@
 
  
 ## 🚀 Quick Start (60s)
+## Quick Start
 
-To install headlessly (for agents/CI):
+### Bootstrap the Workspace (Recommended)
+
 ```bash
-python serverinstaller/install.py --headless
+python bootstrap.py
 ```
 
-To install selectively (guided inventory):
+This will check for and optionally fetch the other Git-Packager components (`mcp-injector`, `mcp-server-manager`) to enable the full suite of functionality.
+
+### Manual Installation
+
 ```bash
 python serverinstaller/install.py
 ```
@@ -111,3 +116,31 @@ This integration enables the installer to automatically configure MCP servers in
 
 ---
 **Status**: Production-ready for agent-driven replication.
+
+---
+
+## 🤝 Better Together: Git-Packager Workspace
+
+This tool is the **orchestrator** of the Git-Packager workspace:
+
+| Tool | Purpose |
+|------|--------|
+| **mcp-injector** | Safely manage MCP server configs in IDE JSON files |
+| **mcp-server-manager** | Discover and track MCP servers across your system |
+| **repo-mcp-packager** (this tool) | Install and package MCP servers with automation |
+
+### Standalone vs. Integrated
+
+- **Standalone**: Works perfectly for installing individual MCP servers.
+- **Integrated**: The full workspace provides:
+  - Automatic IDE configuration via `mcp-injector`
+  - Server discovery and tracking via `mcp-server-manager`
+  - One-command workspace setup via `python bootstrap.py`
+
+### Bootstrap the Complete Workspace
+
+```bash
+python bootstrap.py
+```
+
+This checks for missing Git-Packager components and offers to fetch them from GitHub, giving you the complete suite of tools.
