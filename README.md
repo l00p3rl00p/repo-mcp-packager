@@ -1,22 +1,30 @@
 # MCP Workforce Nexus: The Activator
 
-**The primary engine for deploying, hardening, and unifying MCP server environments with Six Sigma (99.999%) reliability.**
+**The primary engine for deploying, hardening, and unifying MCP server environments with industrial-grade reliability.**
 
 The **Activator** orchestrates the Workforce Nexus, transforming raw GitHub repositories into production-ready AI tools. It handles environment isolation, structural auditing, and atomic deployments.
 
-> [!IMPORTANT]
-> **Technical Deep Dive**: For industrial-grade reliability details and internal logic flow, see [NEXUS_TECHNICAL_SPEC.md](./NEXUS_TECHNICAL_SPEC.md).
+---
+
+## ⚡ Quick Start: Standalone Activator
+
+Install a single repository as a portable MCP server immediately:
+
+```bash
+python3 serverinstaller/install.py
+```
+*Selection tip: Follow the prompts to detect Python/Node and generate an `install.sh` shim.*
 
 ---
 
-## ⚡ Quick Start: Zero-Dep Bootstrap
+## 🚀 Package Start: The Workforce Nexus
 
 Deploy the entire hardened Nexus suite to `~/.mcp-tools` in one command:
 
 ```bash
-python3 bootstrap.py
+python3 bootstrap.py --gui
 ```
-*Selection tip: Choose **Permanent** for 99.999% confidence.*
+*Selection tip: Use `--gui` to auto-launch the dashboard after installation.*
 
 ---
 
@@ -25,8 +33,7 @@ python3 bootstrap.py
 2. [Reliability Tier Comparison](#reliability-tier-comparison)
 3. [Core Capabilities](#core-capabilities)
 4. [Universal Safety & Rollback](#universal-safety--rollback)
-5. [The Nexus Suite](#the-nexus-suite)
-6. [Standalone vs Integrated](#standalone-vs-integrated)
+5. [Documentation (Low Density)](#documentation-low-density)
 
 ---
 
@@ -46,22 +53,23 @@ graph LR
 
 ## 📊 Reliability Tier Comparison
 
-Choose your level of certainty. All tiers include **Universal Safety (Pre-flight & Rollback)**.
+All tiers include **Universal Safety (Pre-flight & Rollback)**.
 
-| Tier | Flag | Confidence | Strategy | Features |
+| Tier | Flag | Convergence Area | Strategy | Features |
 | :--- | :--- | :---: | :--- | :--- |
-| **Lite** | `--lite` | **93%** | Zero-Dep | Portable, Atomic Reversal |
-| **Standard** | (Default) | **96%** | Pure Python | Structural Audit, Regex Indexing |
-| **Permanent**| `--permanent` | **99.999%** | Infrastructure | Managed Venv, `jsonschema`, `pathspec` |
+| **Lite** | `--lite` | **Distributed** | Zero-Dep | Portable, Atomic Reversal, Auto-Chmod |
+| **Standard** | (Default) | **Linked** | Pure Python | Structural Audit, Regex Indexing, Symlinks |
+| **Industrial** | `--industrial` | **Unified** | Infrastructure | Managed Venv, `jsonschema`, `pathspec` |
 
 ---
 
 ## 🌟 Core Capabilities
 
 *   **Atomic Transactions**: Multi-tool installation that reverts completely on failure.
-*   **Pre-flight Intelligence**: verifies disk health and permissions before execution.
-*   **Structural Auditing**: Protects IDE configs from schema drift and corruption.
-*   **Nexus Venv Management**: (Permanent Mode) Builds a private environment for industrial-grade libraries.
+*   **Suite Synergy**: Detects sibling tools and triggers "Application Convergence" for a unified experience.
+*   **Intelligent Resolution**: Prompt/Recommend between multiple entry points (e.g., `.sh` vs `.py`).
+*   **Auto-Chmod Enforcement**: Automatically sets execute bits on all entry points and dependencies.
+*   **Pre-flight Intelligence**: Verifies disk health and permissions before execution.
 *   **Headless Mode**: Zero-touch replication for automated agents.
 
 ---
@@ -80,27 +88,47 @@ flowchart LR
 
 ---
 
-## 🤝 The Nexus Suite
+## 📚 Documentation (Low Density Deep Dives)
 
-The Activator is the builder for the complete workforce ecosystem:
+Detailed technical manuals for engineering reference:
 
-*   **[mcp-injector](../mcp-injector)**: The Surgeon — Safely manages IDE configs.
-*   **[mcp-server-manager](../mcp-server-manager)**: The Observer — Unified health and log ingestion.
-*   **[mcp-link-library](../mcp-link-library)**: The Librarian — Knowledge and document engine.
+*   **[ARCHITECTURE.md](./ARCHITECTURE.md)**: Logic models, subsystems, and state machines.
+*   **[ENVIRONMENT.md](./ENVIRONMENT.md)**: Audit logic, OS-specific paths, and dependency rules.
+*   **[FEATURES.md](./FEATURES.md)**: Command matrix, resolve logic, and scorable feature logs.
+*   **[NEXUS_TECHNICAL_SPEC.md](./NEXUS_TECHNICAL_SPEC.md)**: Master reliability specification.
+
+
+
+## 🖥️ Launching the Dashboard
+
+For a visual overview of your Nexus, use the provided helper script or CLI command:
+
+```bash
+./start_gui.sh
+# OR
+python3 -m mcp_inventory.cli gui
+```
+
+Open your browser to `http://localhost:8501`.
 
 ---
 
-## 🎯 Standalone vs Integrated
+# Application Convergence & Synergy
+The "Nexus Application" mode is triggered when the bootstrapper detects all four modules (mcp-injector, mcp-link-library, mcp-server-manager, repo-mcp-packager) in the same workspace.
 
-| Situation | Recommended Setup | Why? |
-| :--- | :--- | :--- |
-| **Isolated Install** | Standalone | Minimal footprint, surgically target one repo. |
-| **Multiple Tools** | **Full Nexus Suite** | Orchestrated discovery + config + monitoring. |
-| **Mission Critical**| **Permanent Nexus** | 100% Git-compliant indexing and schema-locked configs. |
+Convergence Matrix (Organization & Areas)
+Feature	Lite (Loose Binding)	Standard (Close Binding)	Industrial (Managed App)
+Philosophy	"Distributed & Portable"	"Cohesive & Linked"	"Monolithic & Hardened"
+Logic Area	Repos remain in workspace	~/.mcp-tools/suite (Symlinks)	~/.mcp-tools/app (Managed Mirror)
+Shared Base	~/.mcp-tools/lite/	~/.mcp-tools/standard/	~/.mcp-tools/industrial/
+Environment	OS-Default / Manual Venv	Per-module local venvs	Single Unified Hardened Venv
+Update Path	Manual per repo	Live (via Symlinks)	On-Demand (nexus-sync)
+Global Path	Optional (Local first)	Recommended	Mandatory Enforcement
+
 
 ---
 
 ## 📝 Metadata
-*   **Status**: Production Ready / Hardened
-*   **Reference**: [ARCHITECTURE.md](./ARCHITECTURE.md) | [ENVIRONMENT.md](./ENVIRONMENT.md)
+*   **Status**: Production Ready / Hardened (Phase 9)
 *   **Author**: l00p3rl00p
+*   **Workflow**: Adheres to `@/fix-md-files-for-release`

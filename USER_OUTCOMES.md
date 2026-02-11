@@ -33,6 +33,24 @@ As a user, I want:
 * **Surgical Integrity**: The `uninstall` command surgically reverses only the changes it made, ensuring the host is returned to its pre-installation state.
 * **Before/After Verification**: Clear reports allow the operator (human or agent) to verify every change. No stealth modifications to PATH or Registry.
 
+### 4. Universal Observability
+* **Visual Status**: The user can see the health and connection status of all Nexus components (Observer, Librarian, Injector, Activator) in a single dashboard.
+* **Graceful Degradation**: The system functions even if components are missing, clearly indicating what is available vs. what needs installation.
+
+### 5. Resilient Lifecycle
+* **Atomic Rollback**: If an installation fails at any step, the system automatically reverts to a clean state, leaving no partial artifacts.
+* **Safe Upgrades**: The installer respects existing configurations and only applies necessary updates, preventing "config drift" or data loss.
+
+---
+
+## 🚀 Roadmap to 100% Compliance
+
+To fully align with these outcomes, the following enhancements are planned:
+
+*   **Observability**: The GUI must eventually show *live* metrics (CPU/Memory) for the industrial tier, not just static "Presence".
+*   **Usability**: The "Librarian CRUD" tools need a UI frontend. Currently, they are "Headless Tools" only.
+*   **Resilience**: While `start_gui.sh` exists, the Python entry point (`python -m mcp_inventory.cli`) is more cross-platform compatible and should be the primary recommendation in all docs.
+
 ---
 
 ## 🚥 High-Fidelity Signals

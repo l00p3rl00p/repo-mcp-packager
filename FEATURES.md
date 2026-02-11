@@ -10,9 +10,9 @@ The Activator is the primary engine for transforming repositories into productio
 
 | Strategy | Mode | Reliability | Environment | Use Case |
 | :--- | :--- | :---: | :--- | :--- |
-| **Full Install** | Interactive | **96-99%** | Managed `.venv` | Complex Python/Node projects |
-| **Lightweight** | `--lite` | **93%** | Shell Shim (`.sh`) | Single-file scripts / Portability |
-| **Permanent** | `--permanent`| **99.999%** | Nexus Infra | Mission-critical deployments |
+| **Full Install** | Interactive | **High** | Managed `.venv` | Complex Python/Node projects |
+| **Lightweight** | `--lite` | **Basic** | Shell Shim (`.sh`) | Single-file scripts / Portability |
+| **Permanent** | `--permanent`| **Industrial** | Nexus Infra | Mission-critical deployments |
 | **Headless** | `--headless` | **Automated**| Non-interactive | CI/CD / AI Agent replication |
 
 ---
@@ -78,3 +78,19 @@ The `uninstall.py` tool uses the **Nexus Manifest Layer** to ensure zero-residue
 
 > **Author**: l00p3rl00p / Workforce Nexus
 > **Reference**: [NEXUS_TECHNICAL_SPEC.md](./NEXUS_TECHNICAL_SPEC.md)
+
+
+
+# Application Convergence & Synergy
+The "Nexus Application" mode is triggered when the bootstrapper detects all four modules (mcp-injector, mcp-link-library, mcp-server-manager, repo-mcp-packager) in the same workspace.
+
+Convergence Matrix (Organization & Areas)
+Feature	Lite (Loose Binding)	Standard (Close Binding)	Industrial (Managed App)
+Philosophy	"Distributed & Portable"	"Cohesive & Linked"	"Monolithic & Hardened"
+Logic Area	Repos remain in workspace	~/.mcp-tools/suite (Symlinks)	~/.mcp-tools/app (Managed Mirror)
+Shared Base	~/.mcp-tools/lite/	~/.mcp-tools/standard/	~/.mcp-tools/industrial/
+Environment	OS-Default / Manual Venv	Per-module local venvs	Single Unified Hardened Venv
+Update Path	Manual per repo	Live (via Symlinks)	On-Demand (nexus-sync)
+Global Path	Optional (Local first)	Recommended	Mandatory Enforcement
+
+

@@ -1,12 +1,12 @@
 # Workforce Nexus: Technical Specification & Release Guide
 
-The **Workforce Nexus** is a mission-critical infrastructure suite for AI-assisted development. This document provides a high-density reference for all features, reliability tiers, and operational flows.
+The **Workforce Nexus** is a mission-critical infrastructure suite for AI-assisted development. This document provides a low-density reference for all features, reliability tiers, and operational flows.
 
 ---
 
 ## ⚡ Quick Reference: The Reliability Matrix
 
-| Feature | Lite (93%) | Standard (96%) | Permanent (99.999%) |
+| Feature | Basic | High | Industrial |
 | :--- | :---: | :---: | :---: |
 | **Philosophy** | Portable Utility | Power-Tool | Infrastructure |
 | **Dependencies** | Zero-Dep | Pure Python | Managed Venv |
@@ -120,7 +120,7 @@ If the Nexus becomes unaligned:
 
 | Symptom | Cause | Resolution |
 | :--- | :--- | :--- |
-| **Index Misses Files** | `.gitignore` too restrictive | Use `Standard` or `Permanent` tier for better pattern matching. |
+| **Index Misses Files** | `.gitignore` too restrictive | Use `Industrial` tier for 100% pattern matching. |
 | **Config Rejected** | Structural Drift | Manual IDE update detected. Run with `--force` or update the Surgeon. |
 | **Venv Missing** | Install interrupted | Re-run `bootstrap.py --permanent`. |
 
