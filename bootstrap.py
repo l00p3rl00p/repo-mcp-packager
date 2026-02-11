@@ -3,6 +3,10 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, TypedDict
 
+from nexus_devlog import prune_devlogs, devlog_path, log_event, run_capture
+
+DEVLOG: Optional[Path] = None
+
 # Workforce Nexus Global Registry
 GITHUB_ROOT = "https://github.com/l00p3rl00p"
 NEXUS_REPOS = {
@@ -102,7 +106,10 @@ def fetch_nexus_repo(name: str, target_dir: Path, update=False):
         if target_dir.exists() and (target_dir / ".git").exists():
             if update:
                 print(f"🔄 Updating {name}...")
-                subprocess.run(["git", "-C", str(target_dir), "pull"], check=True)
+                if DEVLOG:
+                    run_capture(["git", "-C", str(target_dir), "pull"], devlog=DEVLOG, check=True)
+                else:
+                    subprocess.run(["git", "-C", str(target_dir), "pull"], check=True)
                 return True
             return True
             
@@ -110,10 +117,14 @@ def fetch_nexus_repo(name: str, target_dir: Path, update=False):
         if target_dir.exists():
             shutil.rmtree(target_dir)
             
-        subprocess.run(["git", "clone", "--depth", "1", url, str(target_dir)], check=True)
+        if DEVLOG:
+            run_capture(["git", "clone", "--depth", "1", url, str(target_dir)], devlog=DEVLOG, check=True)
+        else:
+            subprocess.run(["git", "clone", "--depth", "1", url, str(target_dir)], check=True)
         return True
     except Exception as e:
         print(f"❌ Failed to fetch/update {name}: {e}")
+        log_event(DEVLOG, "fetch_repo_failed", {"repo": name, "target": str(target_dir), "error": str(e)})
         return False
 
 def get_mcp_tools_home():
@@ -380,9 +391,14 @@ def install_converged_application(tier, workspace, update=False):
         # Trigger Librarian Synergy (Lazy sync)
         print("🧠 Triggering Librarian Suite Indexing...")
         try:
-            subprocess.run([sys.executable, str(central / "mcp-link-library" / "mcp.py"), "--index-suite"], check=False)
+            cmd = [sys.executable, str(central / "mcp-link-library" / "mcp.py"), "--index-suite"]
+            if DEVLOG:
+                run_capture(cmd, devlog=DEVLOG, check=False)
+            else:
+                subprocess.run(cmd, check=False)
         except Exception as e:
             print(f"⚠️  Indexing minor issue: {e} (Installation still successful)")
+            log_event(DEVLOG, "suite_index_failed", {"error": str(e)})
 
     print("\n" + "="*60)
     print(f"✅  INSTALLATION SUCCESSFUL (Tier: {tier.upper()})")
@@ -404,7 +420,10 @@ def setup_nexus_venv(central: Path):
     print(f"\n📦 Building Industrial Infrastructure at {venv_dir}...")
     
     try:
-        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        if DEVLOG:
+            run_capture([sys.executable, "-m", "venv", str(venv_dir)], devlog=DEVLOG, check=True)
+        else:
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
         
         # Determine pip path
         if platform.system() == "Windows":
@@ -415,18 +434,25 @@ def setup_nexus_venv(central: Path):
         # 1. Upgrade pip to silence warnings and ensure compatibility
         print("⬆️  Upgrading pip to latest version...")
         try:
-            subprocess.run([str(pip), "install", "--upgrade", "pip"], check=True)
+            if DEVLOG:
+                run_capture([str(pip), "install", "--upgrade", "pip"], devlog=DEVLOG, check=True)
+            else:
+                subprocess.run([str(pip), "install", "--upgrade", "pip"], check=True)
         except subprocess.CalledProcessError:
             print("⚠️  Pip upgrade failed, attempting to continue with current version...")
 
         print("📥 Installing high-confidence libraries (pathspec, jsonschema, psutil, PyYAML)...")
         # 2. Allow interactive prompts if packages need them
-        subprocess.run([str(pip), "install", "pathspec", "jsonschema", "psutil", "PyYAML"], check=True)
+        if DEVLOG:
+            run_capture([str(pip), "install", "pathspec", "jsonschema", "psutil", "PyYAML"], devlog=DEVLOG, check=True)
+        else:
+            subprocess.run([str(pip), "install", "pathspec", "jsonschema", "psutil", "PyYAML"], check=True)
         
         print("✅ Nexus Venv ready.")
         return True
     except Exception as e:
         print(f"❌ Failed to setup Nexus Venv: {e}")
+        log_event(DEVLOG, "venv_setup_failed", {"error": str(e), "venv_dir": str(venv_dir)})
         return False
 
 def ensure_global_path(central: Path):
@@ -683,9 +709,13 @@ def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> No
             print("⚠️  Injector not found; skipping IDE injection prompt.")
             return
 
-        subprocess.run([sys.executable, str(injector), "--startup-detect"], check=False)
+        if DEVLOG:
+            run_capture([sys.executable, str(injector), "--startup-detect"], devlog=DEVLOG, check=False)
+        else:
+            subprocess.run([sys.executable, str(injector), "--startup-detect"], check=False)
     except Exception as e:
         print(f"⚠️  IDE injection prompt skipped: {e}")
+        log_event(DEVLOG, "ide_injection_prompt_failed", {"error": str(e)})
 
 def generate_integrity_manifest(central: Path):
     """Generate SHA-256 integrity manifest for all installed files."""
@@ -717,16 +747,28 @@ def main():
     parser.add_argument("--strategy", choices=["full", "step"], help="Installation strategy")
     parser.add_argument("--gui", action="store_true", help="Launch GUI after installation")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output + devlog-friendly prints")
+    parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     args = parser.parse_args()
+
+    if args.devlog:
+        prune_devlogs(days=90)
+        global DEVLOG
+        DEVLOG = devlog_path()
+        log_event(DEVLOG, "bootstrap_start", {"argv": sys.argv})
+        if args.verbose:
+            print(f"[-] Devlog: {DEVLOG}")
 
     if args.sync:
         workspace = get_workspace_root()
         if not workspace:
             print("🔄 No workspace found. Syncing Industrial Nexus via GitHub...")
             install_converged_application('industrial', None, update=True)
+            log_event(DEVLOG, "bootstrap_end", {"rc": 0})
             return
         print(f"🔄 Syncing Industrial Nexus from local workspace: {workspace}")
         install_converged_application('industrial', workspace, update=True)
+        log_event(DEVLOG, "bootstrap_end", {"rc": 0})
         return
 
     if sys.version_info < (3,6):

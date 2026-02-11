@@ -133,6 +133,7 @@ class SheshaUninstaller:
         verbose: bool = False,
         devlog: Optional[Path] = None,
         yes: bool = False,
+        dry_run: bool = False,
     ):
         self.project_root = project_root
         self.kill_venv = kill_venv
@@ -140,6 +141,7 @@ class SheshaUninstaller:
         self.verbose = verbose
         self.devlog = devlog
         self.yes = yes
+        self.dry_run = dry_run
         self.manifest_path = self.project_root / ".librarian" / "manifest.json"
 
     def log(self, msg: str):
@@ -323,6 +325,12 @@ class SheshaUninstaller:
                     _write_devlog(self.devlog, "aborted", {"targets": [str(p) for _, p, _ in deduped]})
                 return 2
 
+        if self.dry_run:
+            self.log("Dry-run enabled; no changes were made.")
+            if self.devlog:
+                _write_devlog(self.devlog, "dry_run", {"targets": [str(p) for _, p, _ in deduped]})
+            return 0
+
         # Remove PATH block if we are purging.
         _remove_path_block(verbose=self.verbose, devlog=self.devlog)
 
@@ -420,6 +428,7 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
     parser.add_argument("--devlog", action="store_true", help="Write a dev log (JSONL) with 90-day retention")
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
+    parser.add_argument("--dry-run", action="store_true", help="Print planned removals, but do not delete anything")
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent.resolve()
@@ -438,6 +447,7 @@ def main():
         verbose=args.verbose,
         devlog=devlog_path,
         yes=args.yes,
+        dry_run=args.dry_run,
     )
     rc = uninstaller.run()
     if devlog_path:
