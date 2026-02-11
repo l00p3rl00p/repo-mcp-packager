@@ -56,6 +56,14 @@ mcp-observer gui
 *   **URL**: [http://localhost:8501](http://localhost:8501)
 *   **Context**: Can be run from ANY directory once installed.
 
+### Launching the Nexus Control Surface
+The Nexus Control Surface is a local GUI for running curated commands and managing long-running tasks (daemons) with log tailing.
+
+```bash
+mcp-nexus-gui --port 8787
+```
+* **URL**: [http://127.0.0.1:8787](http://127.0.0.1:8787)
+
 ### Stopping the GUI
 To terminate the dashboard server:
 1.  Go to the terminal window where the command is running.
@@ -88,6 +96,24 @@ export PATH="$HOME/.mcp-tools/bin:$PATH"
 ```bash
 mcp-surgeon add claude my-new-server "python3 /path/to/server.py"
 ```
+
+### Connecting Web AI Clients via a Local MCP Proxy (Recommended)
+When you want MCP tools inside browser-based AI clients (ChatGPT, Perplexity, Gemini, AI Studio, etc.), the most reliable pattern is:
+1. Run a local MCP proxy that adds CORS + stable transports (SSE / Streamable HTTP / WebSocket)
+2. Point the web client/extension at the proxy URL (defaults below)
+
+Proxy (SSE):
+```bash
+<your-mcp-proxy> --config "~/Library/Application Support/Claude/claude_desktop_config.json" --outputTransport sse
+```
+Defaults:
+* SSE: `http://localhost:3006/sse`
+* Streamable HTTP: `http://localhost:3006/mcp`
+* WebSocket: `ws://localhost:3006/message`
+
+Notes:
+* This is primarily for **web clients**. Claude Desktop expects stdio JSON-RPC, not SSE/HTTP.
+* The `--config` file can contain local `mcpServers` (command/args) and/or remote MCP server URLs, depending on your workflow.
 
 ### Indexing a directory into the Librarian
 ```bash

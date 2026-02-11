@@ -93,10 +93,25 @@ def git_available():
     except:
         return False
 
-def fetch_nexus_repo(name: str, target_dir: Path, update=False):
+def _is_probably_git_url(value: str) -> bool:
+    v = value.strip()
+    if not v:
+        return False
+    if v.startswith(("https://", "http://")):
+        return True
+    # SSH style: git@github.com:org/repo.git
+    if v.startswith("git@") and ":" in v:
+        return True
+    return False
+
+def fetch_nexus_repo(name: str, target_dir: Path, update=False, url_override: Optional[str] = None):
     """Fetch a repo from GitHub if missing, or update if requested."""
-    url = NEXUS_REPOS.get(name)
-    if not url: return False
+    url = url_override or NEXUS_REPOS.get(name)
+    if not url:
+        return False
+    if url_override and not _is_probably_git_url(url_override):
+        print(f"❌ Invalid repo URL for {name}. Expected https://... or git@...:...")
+        return False
     
     if not git_available():
         print(f"❌ Git not found. Cannot manage {name} automatically.")
@@ -132,6 +147,66 @@ def get_mcp_tools_home():
         return Path(os.environ['USERPROFILE']) / ".mcp-tools"
     return Path.home() / ".mcp-tools"
 
+def _is_running_in_venv() -> bool:
+    if os.environ.get("VIRTUAL_ENV"):
+        return True
+    base_prefix = getattr(sys, "base_prefix", sys.prefix)
+    return sys.prefix != base_prefix
+
+def _preferred_system_python3() -> Optional[Path]:
+    """
+    Select a stable, non-virtualenv python3 for bootstrapping Nexus infrastructure.
+
+    Why: if bootstrap.py is run from inside some project venv, using sys.executable to seed
+    ~/.mcp-tools/.venv can cause the new venv's interpreter to point at that project venv,
+    effectively "taking over" global wrappers.
+    """
+    candidates: list[Path] = []
+
+    # macOS has a stable baseline python3 location (CommandLineTools).
+    if platform.system() != "Windows":
+        candidates.append(Path("/usr/bin/python3"))
+
+    for name in ("python3", "python"):
+        resolved = shutil.which(name)
+        if resolved:
+            candidates.append(Path(resolved))
+
+    active_venv = os.environ.get("VIRTUAL_ENV")
+    for candidate in candidates:
+        try:
+            if not candidate.exists() or not os.access(candidate, os.X_OK):
+                continue
+            resolved = candidate.resolve()
+            if active_venv and str(resolved).startswith(active_venv.rstrip("/") + "/"):
+                continue
+            return resolved
+        except Exception:
+            continue
+    return None
+
+def _nexus_python(central: Path) -> Path:
+    """
+    Prefer the Nexus-managed venv python when present; otherwise fall back to a system python3.
+    """
+    if platform.system() == "Windows":
+        venv_python = central / ".venv" / "Scripts" / "python.exe"
+    else:
+        venv_python = central / ".venv" / "bin" / "python"
+    if venv_python.exists() and os.access(venv_python, os.X_OK):
+        return venv_python
+    return _preferred_system_python3() or Path(sys.executable)
+
+def _is_central_install_dir(path: Path) -> bool:
+    try:
+        central = get_mcp_tools_home().resolve()
+        candidate = path.resolve()
+        if candidate == central:
+            return True
+        return candidate.samefile(central)
+    except Exception:
+        return False
+
 def get_workspace_root():
     """
     Find the workspace root without walking up directories.
@@ -147,12 +222,45 @@ def get_workspace_root():
     ]
     for base in candidates:
         try:
+            # Never treat the central install dir (~/.mcp-tools) as a source workspace.
+            if _is_central_install_dir(base):
+                continue
             found = [s for s in siblings if (base / s).is_dir()]
             if len(found) >= 2:
                 return base
         except Exception:
             continue
     return None
+
+def _load_central_config(central: Path) -> dict:
+    """
+    Best-effort load of ~/.mcp-tools/config.json.
+    Must never throw; config is optional.
+    """
+    try:
+        cfg_path = central / "config.json"
+        if not cfg_path.exists():
+            return {}
+        raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+def _get_extra_repos_from_config(config: dict) -> dict:
+    """
+    Optional extension point for installing additional repos alongside the Nexus suite.
+
+    Expected format:
+      "extra_repos": { "my-repo": "git@github.com:org/my-repo.git" }
+    """
+    extra = config.get("extra_repos")
+    if not isinstance(extra, dict):
+        return {}
+    out: dict = {}
+    for name, url in extra.items():
+        if isinstance(name, str) and isinstance(url, str) and name.strip() and url.strip():
+            out[name.strip()] = url.strip()
+    return out
 
 def detect_which_repo():
     return Path(__file__).parent.name
@@ -292,6 +400,12 @@ def install_to_central(central, workspace=None, update=False):
     
     # Define our components
     repos = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
+    config = _load_central_config(central)
+    extra_repos = _get_extra_repos_from_config(config)
+    if extra_repos:
+        for extra_name in extra_repos.keys():
+            if extra_name not in repos:
+                repos.append(extra_name)
 
     # Workspace environment conflict warning (no disk scanning; only direct checks)
     if workspace:
@@ -330,7 +444,8 @@ def install_to_central(central, workspace=None, update=False):
                 raise e
         else:
             # Mode B: GitHub Discovery (Autonomous/Standalone Mode)
-            if fetch_nexus_repo(repo, target, update=update):
+            url_override = extra_repos.get(repo) if extra_repos else None
+            if fetch_nexus_repo(repo, target, update=update, url_override=url_override):
                 if target not in INSTALLED_ARTIFACTS:
                     INSTALLED_ARTIFACTS.append(target)
                 ensure_executable(target)
@@ -348,7 +463,7 @@ def install_to_central(central, workspace=None, update=False):
                 except Exception as e:
                     print(f"⚠️  Failed to expose uninstall.py: {e}")
 
-def install_converged_application(tier, workspace, update=False):
+def install_converged_application(tier, workspace, update: bool = False, add_to_path: bool = False):
     """Phase 12: Application Convergence Logic."""
     central = get_mcp_tools_home()
     central.mkdir(parents=True, exist_ok=True)
@@ -385,13 +500,14 @@ def install_converged_application(tier, workspace, update=False):
         install_to_central(central, workspace, update=update)
         setup_nexus_venv(central)
         create_hardened_entry_points(central)
-        ensure_global_path(central)
+        if add_to_path:
+            ensure_global_path(central)
         ensure_suite_index_prereqs(central)
         prompt_for_client_injection(workspace=workspace, central=central, tier=tier)
         # Trigger Librarian Synergy (Lazy sync)
         print("🧠 Triggering Librarian Suite Indexing...")
         try:
-            cmd = [sys.executable, str(central / "mcp-link-library" / "mcp.py"), "--index-suite"]
+            cmd = [str(_nexus_python(central)), str(central / "mcp-link-library" / "mcp.py"), "--index-suite"]
             if DEVLOG:
                 run_capture(cmd, devlog=DEVLOG, check=False)
             else:
@@ -410,8 +526,13 @@ def install_converged_application(tier, workspace, update=False):
     print(f"   Command: mcp-observer gui")
     print(f"   URL:     http://localhost:8501")
     print("-" * 60)
-    print(f"Log out and back in to refresh your path, or run:")
-    print(f"  source ~/.zshrc  (or ~/.bashrc)")
+    if add_to_path:
+        print(f"Log out and back in to refresh your path, or run:")
+        print(f"  source ~/.zshrc  (or ~/.bashrc)")
+    else:
+        print("ℹ️  Shell PATH was NOT modified (default).")
+        print(f"   Run directly: {central}/bin/mcp-activator (etc.)")
+        print("   Or re-run with --add-to-path to add ~/.mcp-tools/bin to your shell PATH.")
     print("="*60 + "\n")
 
 def setup_nexus_venv(central: Path):
@@ -420,10 +541,13 @@ def setup_nexus_venv(central: Path):
     print(f"\n📦 Building Industrial Infrastructure at {venv_dir}...")
     
     try:
+        base_python = _preferred_system_python3() or Path(sys.executable)
+        if _is_running_in_venv():
+            print(f"ℹ️  Detected active virtualenv; seeding Nexus venv with: {base_python}")
         if DEVLOG:
-            run_capture([sys.executable, "-m", "venv", str(venv_dir)], devlog=DEVLOG, check=True)
+            run_capture([str(base_python), "-m", "venv", str(venv_dir)], devlog=DEVLOG, check=True)
         else:
-            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+            subprocess.run([str(base_python), "-m", "venv", str(venv_dir)], check=True)
         
         # Determine pip path
         if platform.system() == "Windows":
@@ -507,17 +631,19 @@ def create_hardened_entry_points(central: Path):
     if platform.system() == "Windows":
         venv_python = central / ".venv" / "Scripts" / "python.exe"
     
-    if not venv_python.exists():
-        # Fallback to system python if venv failed, but warn
-        print("⚠️  Hardened venv not found. Using system python for entry points.")
-        venv_python = sys.executable
+    # Note: We still embed the venv python path, but wrappers are runtime-robust:
+    # if the venv python is missing (e.g., user deleted ~/.mcp-tools/.venv), wrappers fall back to system python.
+    venv_python_str = str(venv_python)
 
     # Command mapping: entry_name -> (repo_dir, module_path, use_python_m)
     commands = {
         "mcp-surgeon": ("mcp-injector", "mcp_injector.py", False),
         "mcp-observer": ("mcp-server-manager", "mcp_inventory/cli.py", True), # Uses -m mcp_inventory.cli
         "mcp-librarian": ("mcp-link-library", "mcp.py", False),
-        "mcp-activator": ("repo-mcp-packager", "bootstrap.py", False)
+        "mcp-activator": ("repo-mcp-packager", "bootstrap.py", False),
+        # Nexus Control Surface (local GUI command runner). Kept as a separate entry point
+        # so it remains usable from the central install even if the original workspace is deleted.
+        "mcp-nexus-gui": ("repo-mcp-packager", "gui/server.py", False),
     }
     
     for cmd, (repo, module, use_m) in commands.items():
@@ -534,14 +660,34 @@ def create_hardened_entry_points(central: Path):
             module_name = module.replace("/", ".").replace(".py", "")
             wrapper = f"""#!/bin/bash
 # Workforce Nexus Hardened Wrapper
+VENV_PY="{venv_python_str}"
+if [[ -x "$VENV_PY" ]]; then
+  PY="$VENV_PY"
+else
+  if [[ -x "/usr/bin/python3" ]]; then
+    PY="/usr/bin/python3"
+  else
+    PY="$(command -v python3 || command -v python)"
+  fi
+fi
 export PYTHONPATH="{central}/mcp-server-manager:$PYTHONPATH"
-"{venv_python}" -m {module_name} "$@"
+"$PY" -m {module_name} "$@"
 """
         else:
             wrapper = f"""#!/bin/bash
 # Workforce Nexus Hardened Wrapper
+VENV_PY="{venv_python_str}"
+if [[ -x "$VENV_PY" ]]; then
+  PY="$VENV_PY"
+else
+  if [[ -x "/usr/bin/python3" ]]; then
+    PY="/usr/bin/python3"
+  else
+    PY="$(command -v python3 || command -v python)"
+  fi
+fi
 export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/repo-mcp-packager:$PYTHONPATH"
-"{venv_python}" "{target_script}" "$@"
+"$PY" "{target_script}" "$@"
 """
         try:
             cmd_path.write_text(wrapper)
@@ -582,7 +728,7 @@ def run_uninstaller(central: Path) -> int:
         print(f"   Expected: {central}/repo-mcp-packager/uninstall.py")
         return 2
     try:
-        cmd = [sys.executable, str(uninstaller), "--kill-venv", "--purge-data"]
+        cmd = [str(_nexus_python(central)), str(uninstaller), "--kill-venv", "--purge-data"]
         return subprocess.call(cmd)
     except Exception as e:
         print(f"❌ Failed to run uninstaller: {e}")
@@ -608,19 +754,19 @@ def run_injector_config_flow(workspace: Optional[Path], central: Path, tier: Opt
 
         # Guided flow (recommended)
         try:
-            return subprocess.call([sys.executable, str(injector), "--startup-detect"])
+            return subprocess.call([str(_nexus_python(central)), str(injector), "--startup-detect"])
         except Exception:
             pass
 
         # Fallback flow
         print("\n🧩 Injector Quickstart")
         print("-" * 60)
-        subprocess.call([sys.executable, str(injector), "--list-clients"])
+        subprocess.call([str(_nexus_python(central)), str(injector), "--list-clients"])
         client = input("\nType the client name to add (e.g., claude): ").strip()
         if not client:
             print("⚠️  No client selected; skipping injector config.")
             return 0
-        return subprocess.call([sys.executable, str(injector), "--client", client, "--add"])
+        return subprocess.call([str(_nexus_python(central)), str(injector), "--client", client, "--add"])
     except Exception as e:
         print(f"❌ Injector config flow failed: {e}")
         return 2
@@ -744,8 +890,10 @@ def main():
     parser.add_argument("--lite", action="store_true", help="Lite mode (Zero-Dep)")
     parser.add_argument("--industrial", "--permanent", action="store_true", dest="industrial", help="Industrial mode (Infrastructure)")
     parser.add_argument("--sync", "--update", action="store_true", dest="sync", help="Sync/Update Workforce Nexus from workspace or GitHub")
+    parser.add_argument("--workspace", type=str, help="Explicit source workspace root (must contain Nexus repos as siblings)")
     parser.add_argument("--strategy", choices=["full", "step"], help="Installation strategy")
     parser.add_argument("--gui", action="store_true", help="Launch GUI after installation")
+    parser.add_argument("--add-to-path", action="store_true", help="Opt-in: add ~/.mcp-tools/bin to shell PATH (edits ~/.zshrc or ~/.bashrc)")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
     parser.add_argument("--verbose", action="store_true", help="Verbose output + devlog-friendly prints")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
@@ -760,14 +908,29 @@ def main():
             print(f"[-] Devlog: {DEVLOG}")
 
     if args.sync:
-        workspace = get_workspace_root()
+        workspace = None
+        if args.workspace:
+            candidate = Path(args.workspace).expanduser()
+            if candidate.exists() and candidate.is_dir() and not _is_central_install_dir(candidate):
+                workspace = candidate
+            else:
+                print(f"⚠️  Ignoring invalid --workspace: {args.workspace}")
+        if not workspace:
+            workspace = get_workspace_root()
+
+        # Only a full dev workspace should be used as the *source* for sync.
+        # If we can't prove that, fall back to GitHub update mode.
+        if workspace and not detect_full_suite(workspace):
+            print(f"🔄 Workspace incomplete at {workspace}; syncing Industrial Nexus via GitHub instead.")
+            workspace = None
+
         if not workspace:
             print("🔄 No workspace found. Syncing Industrial Nexus via GitHub...")
-            install_converged_application('industrial', None, update=True)
+            install_converged_application('industrial', None, update=True, add_to_path=False)
             log_event(DEVLOG, "bootstrap_end", {"rc": 0})
             return
         print(f"🔄 Syncing Industrial Nexus from local workspace: {workspace}")
-        install_converged_application('industrial', workspace, update=True)
+        install_converged_application('industrial', workspace, update=True, add_to_path=False)
         log_event(DEVLOG, "bootstrap_end", {"rc": 0})
         return
 
@@ -810,7 +973,7 @@ def main():
         if not args.lite and not args.industrial:
             # If no manual flags, prompt for convergence
             tier = ask_convergence_tier()
-            install_converged_application(tier, workspace)
+            install_converged_application(tier, workspace, add_to_path=args.add_to_path)
             return
     else:
         # Partial or Autonomous Mode
@@ -852,7 +1015,10 @@ def main():
             if tier == 'industrial':
                 setup_nexus_venv(central)
                 create_hardened_entry_points(central)
-                ensure_global_path(central)
+                if args.add_to_path:
+                    ensure_global_path(central)
+                else:
+                    print("ℹ️  Skipping shell PATH modification (use --add-to-path to opt in).")
 
             # Always make indexing/injection prerequisites available post-install.
             if tier != "lite":

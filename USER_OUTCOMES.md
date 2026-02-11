@@ -55,8 +55,10 @@ To fully align with these outcomes, the following enhancements are planned:
 
 ### 2026-02-11 Alignment Update
 * **Injector Startup Detect**: Added startup detection/prompt flow for common IDE clients, including `claude`, `codex`, and `aistudio` (plus `google-antigravity` alias).
-* **Package-Created Component Injection Policy**: If full Nexus components are detected (`~/.mcp-tools/bin`), the injector now prompts injection per component (`nexus-activator`, `nexus-observer`, `nexus-surgeon`, `nexus-librarian`).
+* **Package-Created Component Injection Policy**: If full Nexus components are detected (`~/.mcp-tools/bin`), the injector prompts injection only for components that are **actual MCP servers over stdio** (currently `nexus-librarian`). Other Nexus binaries (e.g. `mcp-activator`, `mcp-observer`) are CLIs and should not be injected into MCP clients.
 * **Tier-Aware GUI Control Surface**: GUI command widgets now map to command catalog behavior with visual unchecked state for unsupported tier actions.
+* **Web-Client Proxy Best Practice**: For browser-based AI clients, the recommended pattern is to run a local MCP proxy that exposes SSE / Streamable HTTP / WebSocket endpoints (CORS + health) and connect the web client to that proxy.
+* **GUI Daemon Management (PID + Logs)**: The GUI supports daemon-mode widgets for long-running services (start returns a PID + log file; stop + log tail are available via the GUI API).
 * **Central-Only Uninstall Policy**: Full wipes only touch approved central locations (e.g. `~/.mcp-tools`, `~/.mcpinv`, and the Nexus PATH block). No disk scans or directory-tree climbing during uninstall.
 * **Uninstall Safety + Diagnostics**: Uninstall now prints an explicit deletion plan and requires confirmation (unless `--yes`). Added `--verbose` and `--devlog` (JSONL) with 90-day retention for diagnostics.
 * **Bootstrap Safety Policy**: Workspace detection avoids filesystem crawling (checks only `cwd` + script-sibling workspace). If a workspace `.env` is present, the installer warns about potential conflicts with the central install.

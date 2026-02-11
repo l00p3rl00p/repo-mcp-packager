@@ -280,5 +280,37 @@ python mcp_injector.py --startup-detect
 Behavior:
 * Detects common clients (`claude`, `codex`, `cursor`, `vscode`, `xcode`, `aistudio`, `google-antigravity`).
 * Always includes **Claude** in the prompt set as a common injection target.
-* If the full Nexus package is detected (`~/.mcp-tools/bin`), it offers injection for package-created components (`nexus-activator`, `nexus-observer`, `nexus-surgeon`, `nexus-librarian`).
+* If the full Nexus package is detected (`~/.mcp-tools/bin`), it offers injection only for **MCP-server** components (currently `nexus-librarian`). Other Nexus binaries like `mcp-activator` are CLIs and should not be injected into MCP clients.
 * For each component, injection is explicit: **inject now** or **skip now**.
+
+---
+
+## Web Clients (Recommended Pattern)
+If you want MCP tools inside **browser-based AI clients** (ChatGPT, Perplexity, Gemini, AI Studio, etc.), the most reliable pattern is to run a local MCP proxy that exposes SSE/HTTP/WS endpoints (adds CORS, health endpoints, etc.) and then connect the web client/extension to that proxy.
+
+Example (SSE) using a local MCP proxy:
+```bash
+<your-mcp-proxy> --config "~/Library/Application Support/Claude/claude_desktop_config.json" --outputTransport sse
+```
+
+---
+
+## Supported Injection Schema (Best Practice)
+For IDE/Desktop MCP clients (Claude Desktop, Codex, Cursor, VS Code, Xcode), the safe/typical shape under `mcpServers` is:
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "python3",
+      "args": ["/absolute/path/to/server.py"],
+      "env": {
+        "OPTIONAL_KEY": "optional_value"
+      }
+    }
+  }
+}
+```
+Notes:
+* `command` must be a single executable.
+* `args` should be an array (strings).
+* Avoid injecting non-server CLIs (e.g. `mcp-activator`, `mcp-observer`, `mcp-surgeon`) as MCP servers.

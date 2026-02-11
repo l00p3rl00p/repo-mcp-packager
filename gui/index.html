@@ -55,6 +55,21 @@
       <pre id="logsOutput" class="terminal-like">No logs loaded yet.</pre>
     </section>
 
+    <section class="panel daemons">
+      <div class="panel-head">
+        <h2>Daemons</h2>
+        <span class="muted">Long-running tasks (proxy, services)</span>
+      </div>
+      <div id="daemonsEmpty" class="muted">No daemons running.</div>
+      <div id="daemonList" class="daemon-list" hidden></div>
+      <div class="daemon-actions">
+        <input id="daemonPidInput" type="number" placeholder="pid">
+        <button id="stopDaemonBtn" class="btn-secondary" type="button">Stop</button>
+        <button id="viewDaemonLogBtn" class="btn-secondary" type="button">View Log</button>
+      </div>
+      <pre id="daemonLogOutput" class="terminal-like" hidden></pre>
+    </section>
+
     <section class="panel terminal">
       <div class="panel-head">
         <h2>Terminal</h2>

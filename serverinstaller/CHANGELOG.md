@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Standardized all documentation using `MD_FORMAT.md`.
 - Clarified injector startup detect flow and multi-IDE prompting guidance in manual configuration docs.
+- Uninstall diagnostics and safety:
+  - `--verbose`, `--devlog` (JSONL) with 90-day retention pruning.
+  - `--dry-run` to print deletion plan without making changes.
+  - Explicit deletion plan + confirmation prompt (unless `--yes`).
 
 ### Fixed
 - Repaired `install.py` control-flow/syntax path in `run()` to restore executable installer behavior.

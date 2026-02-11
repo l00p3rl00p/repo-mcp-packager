@@ -28,8 +28,10 @@ class PackagerMalformedConfigTests(unittest.TestCase):
             widgets = Path(temp_dir) / "widgets.json"
             widgets.write_text("{ bad-json", encoding="utf-8")
             with mock.patch.object(gui_server, "WIDGETS_FILE", widgets):
-                loaded = gui_server.load_widgets()
+                with mock.patch("builtins.print") as p:
+                    loaded = gui_server.load_widgets()
             self.assertEqual(loaded, {})
+            p.assert_not_called()
             backups = list(Path(temp_dir).glob("widgets.json.corrupt.*"))
             self.assertTrue(backups)
             payload = widgets.read_text(encoding="utf-8")
@@ -42,9 +44,15 @@ class PackagerMalformedConfigTests(unittest.TestCase):
             manifest.parent.mkdir(parents=True, exist_ok=True)
             manifest.write_text("{ bad-json", encoding="utf-8")
             verifier = SheshaVerifier(project)
-            verifier.generate_report()
+            with mock.patch("builtins.print") as p:
+                verifier.generate_report()
+            p.assert_not_called()
             backups = list((project / ".librarian").glob("manifest.json.corrupt.*"))
             self.assertTrue(backups)
+            # Recovery should leave a valid JSON file behind so this doesn't repeat.
+            recovered = manifest.read_text(encoding="utf-8")
+            self.assertIn('"install_artifacts"', recovered)
+            self.assertIsInstance(packager_verify.json.loads(recovered), dict)
 
 
 if __name__ == "__main__":

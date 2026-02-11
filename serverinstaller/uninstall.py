@@ -168,7 +168,10 @@ class SheshaUninstaller:
                 backup = self.manifest_path.with_suffix(f".json.corrupt.{stamp}")
                 try:
                     self.manifest_path.replace(backup)
-                    print(f"⚠️  Recovered malformed manifest. Backup: {backup}")
+                    if self.devlog:
+                        _write_devlog(self.devlog, "manifest_corrupt_recovered", {"backup": str(backup)})
+                    if self.verbose:
+                        print(f"[-] Recovered malformed manifest. Backup: {backup}")
                 except Exception:
                     pass
                 manifest = {}

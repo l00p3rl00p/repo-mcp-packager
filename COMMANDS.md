@@ -17,6 +17,7 @@ Scope note: to avoid documentation drift, this table lists **only commands/flags
 | **Launch Dashboard** | `python3 bootstrap.py --gui` |
 | **Standalone Repo Installer** | `python3 serverinstaller/install.py` |
 | **Full Wipe (Start Fresh) (CLI-only)** | `python3 uninstall.py --kill-venv --purge-data` *(add --verbose / --devlog for diagnostics; --yes for automation)* |
+| **Nexus Control Surface GUI (HTTP)** | `python3 gui/server.py --port 8787` |
 
 ---
 
@@ -89,3 +90,5 @@ The Nexus GUI scaffold in `repo-mcp-packager/gui/` now maps **every executable c
 * Widgets are **tier-gated** (`lite`, `standard`, `permanent`): unsupported actions render visually unchecked.
 * Widget execution routes through a safe backend allowlist (`widget_id`-based), then reports stdout/stderr and exit code.
 * Scope model is preserved: each repo remains standalone, while suite commands still assemble the integrated package.
+
+In addition, the GUI may include a small number of **external helper workflows** (for example, `npx`-based MCP proxies) that are not part of the Nexus repos themselves.

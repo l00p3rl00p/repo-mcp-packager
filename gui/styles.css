@@ -51,6 +51,15 @@ button {
   font-weight: 700;
 }
 
+.btn-secondary {
+  background: #0f1528;
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  border-color: color-mix(in oklab, var(--border), #fff 18%);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -139,6 +148,36 @@ button {
   overflow: auto;
   padding: 12px;
   font-size: 12px;
+}
+
+.daemon-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.daemon-list {
+  display: grid;
+  gap: 8px;
+}
+
+.daemon-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #111a31;
+}
+
+.daemon-item .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.daemon-item code {
+  color: #c7f2db;
 }
 
 @media (max-width: 980px) {

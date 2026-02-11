@@ -6,6 +6,7 @@ import json
 import datetime
 import subprocess
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -41,7 +42,11 @@ def get_global_ide_paths() -> Dict[str, str]:
                 stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 backup = config_path.with_suffix(f".json.corrupt.{stamp}")
                 config_path.replace(backup)
-                print(f"⚠️  Recovered malformed global config: {backup}")
+                try:
+                    if sys.stdout.isatty() or sys.stderr.isatty():
+                        print(f"Recovered malformed global config: {backup}", file=sys.stderr)
+                except Exception:
+                    pass
                 return {}
             if not isinstance(data, dict):
                 return {}
@@ -50,6 +55,35 @@ def get_global_ide_paths() -> Dict[str, str]:
     except Exception:
         pass
     return {}
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    """
+    Write JSON atomically to avoid leaving a truncated / malformed file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd: Optional[int] = None
+    tmp_path: Optional[Path] = None
+    try:
+        tmp_fd, tmp_path_str = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+        tmp_path = Path(tmp_path_str)
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            tmp_fd = None
+            json.dump(payload, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(str(tmp_path), str(path))
+    finally:
+        if tmp_fd is not None:
+            try:
+                os.close(tmp_fd)
+            except Exception:
+                pass
+        if tmp_path is not None and tmp_path.exists():
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 class SheshaInstaller:
     def __init__(self, args: argparse.Namespace):
@@ -326,7 +360,7 @@ class SheshaInstaller:
 
         manifest_data = {
             "install_date": audit["timestamp"],
-            "install_artifacts": self.artifacts,
+            "install_artifacts": [str(p) for p in self.artifacts],
             "install_mode": "managed" if self.args.managed else "dev",
             "remote_url": remote_url,
             "audit_snapshot": audit,
@@ -336,9 +370,8 @@ class SheshaInstaller:
         # Add MCP attachments if any
         if hasattr(self, 'mcp_attachments') and self.mcp_attachments:
             manifest_data["attached_clients"] = self.mcp_attachments
-        
-        with open(manifest_path, 'w') as f:
-            json.dump(manifest_data, f, indent=2)
+
+        _atomic_write_json(manifest_path, manifest_data)
         
         self.log(f"Installation manifest written to {manifest_path}")
 
@@ -448,9 +481,8 @@ fi
                 "wrapper_file": str(wrapper_path),
                 "version": "0.5.0-portable"
             }
-            
-            with open(manifest_path, 'w') as f:
-                json.dump(manifest_data, f, indent=2)
+
+            _atomic_write_json(manifest_path, manifest_data)
             
             self.log(f"Manifest written to {manifest_path}")
             
@@ -582,6 +614,8 @@ requires-python = ">=3.6"
 
     def setup_path(self, audit: Dict[str, Any]):
         """Offer to add Shesha to PATH with markers for surgical reversal."""
+        if not getattr(self.args, "add_venv_to_path", False):
+            return
         if self.args.headless:
             return
 
@@ -882,6 +916,7 @@ def main():
     parser.add_argument("--machine", action="store_true", help="Emit machine-readable JSON logs to stdout")
     parser.add_argument("--managed", action="store_true", help="Install into managed library folder")
     parser.add_argument("--update", action="store_true", help="Update the existing server installation")
+    parser.add_argument("--add-venv-to-path", action="store_true", dest="add_venv_to_path", help="Opt-in: add this repo's .venv/bin to your shell PATH (edits ~/.zshrc or ~/.bashrc)")
     
     # MCP Bridge arguments
     parser.add_argument("--generate-bridge", action="store_true", help="Generate MCP wrapper for legacy code")
