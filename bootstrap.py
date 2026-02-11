@@ -1,4 +1,4 @@
-import os, sys, shutil, platform, argparse, hashlib, subprocess
+import os, sys, shutil, platform, argparse, hashlib, subprocess, json
 from pathlib import Path
 
 # Workforce Nexus Global Registry
@@ -264,6 +264,8 @@ def install_converged_application(tier, workspace, update=False):
                     dest.unlink()
             os.symlink(src, dest)
             print(f"🔗 Linked {repo} -> {dest}")
+        ensure_suite_index_prereqs(central)
+        prompt_for_client_injection(workspace=workspace, central=central, tier=tier)
             
     elif tier == 'industrial':
         # Industrial: Managed Mirror (Copy/Git)
@@ -272,6 +274,8 @@ def install_converged_application(tier, workspace, update=False):
         setup_nexus_venv(central)
         create_hardened_entry_points(central)
         ensure_global_path(central)
+        ensure_suite_index_prereqs(central)
+        prompt_for_client_injection(workspace=workspace, central=central, tier=tier)
         # Trigger Librarian Synergy (Lazy sync)
         print("🧠 Triggering Librarian Suite Indexing...")
         try:
@@ -418,6 +422,51 @@ export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/r
             print(f"✅ Created hardened entry point: {cmd}")
         except Exception as e:
             print(f"❌ Failed to create entry point {cmd}: {e}")
+
+
+def ensure_suite_index_prereqs(central: Path) -> None:
+    """
+    Ensure Librarian suite indexing has stable inputs immediately after install.
+    - Observer inventory: ~/.mcp-tools/mcp-server-manager/inventory.yaml
+    - Injector global config: ~/.mcp-tools/config.json
+    """
+    try:
+        inv_path = central / "mcp-server-manager" / "inventory.yaml"
+        inv_path.parent.mkdir(parents=True, exist_ok=True)
+        if not inv_path.exists():
+            inv_path.write_text("servers: []\n", encoding="utf-8")
+
+        cfg_path = central / "config.json"
+        if not cfg_path.exists():
+            cfg_path.write_text(json.dumps({"ide_config_paths": {}}, indent=2) + "\n", encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️  Suite indexing prereqs not created: {e}")
+
+
+def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> None:
+    """
+    Ask which IDE clients to inject during install (TTY only).
+    Uses mcp-injector's startup-detect flow to keep logic centralized.
+    """
+    try:
+        if not sys.stdin.isatty():
+            return
+        print("\n🧩 IDE Injection (Recommended)")
+        if not ask("Detect MCP-capable IDEs and offer to inject now?"):
+            return
+
+        if tier == "industrial":
+            injector = central / "mcp-injector" / "mcp_injector.py"
+        else:
+            injector = workspace / "mcp-injector" / "mcp_injector.py"
+
+        if not injector.exists():
+            print("⚠️  Injector not found; skipping IDE injection prompt.")
+            return
+
+        subprocess.run([sys.executable, str(injector), "--startup-detect"], check=False)
+    except Exception as e:
+        print(f"⚠️  IDE injection prompt skipped: {e}")
 
 def generate_integrity_manifest(central: Path):
     """Generate SHA-256 integrity manifest for all installed files."""

@@ -1,0 +1,7 @@
+{
+  "install_date": "2026-02-11T17:18:43.076599+00:00",
+  "install_type": "lightweight_wrapper",
+  "script_file": "/Users/almowplay/Developer/Github/mcp-creater-manager/repo-mcp-packager/start_gui.sh",
+  "wrapper_file": "/Users/almowplay/Developer/Github/mcp-creater-manager/repo-mcp-packager/install.sh",
+  "version": "0.5.0-portable"
+}

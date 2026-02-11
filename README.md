@@ -16,6 +16,10 @@ Run a complete wipe (remove local venv + shared suite data) with:
 python3 uninstall.py --kill-venv --purge-data
 ```
 
+## 🧩 IDE Injection During Install
+
+During `--permanent/--industrial` installs, the installer will prompt (TTY only) to auto-detect MCP-capable IDEs and offer to inject the suite tools into them.
+
 ## ⚡ Quick Start: Standalone Activator
 
 Install a single repository as a portable MCP server immediately:
