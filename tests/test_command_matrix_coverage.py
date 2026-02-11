@@ -11,22 +11,29 @@ class CommandMatrixCoverageTests(unittest.TestCase):
     def test_every_documented_command_has_widget(self):
         import json
 
-        rows = []
+        # COMMANDS.md tables may evolve; we count the number of documented *direct commands*
+        # (backticked) and require GUI widgets to cover them.
+        expected_commands = []
         for line in COMMANDS_MD.read_text(encoding="utf-8").splitlines():
-            if line.strip().startswith("| **"):
-                rows.append([part.strip() for part in line.strip("|").split("|")])
-
-        expected = 0
-        for row in rows:
-            global_cmd = row[1]
-            direct_cmd = row[2]
-            if global_cmd != "N/A":
-                expected += 1
-            if direct_cmd != "N/A":
-                expected += 1
+            line = line.strip()
+            if not line.startswith("| **"):
+                continue
+            # collect any backticked command snippets in the row
+            parts = line.split("`")
+            for i in range(1, len(parts), 2):
+                cmd = parts[i].strip()
+                if cmd and cmd != "N/A":
+                    expected_commands.append(cmd)
 
         widgets = json.loads(WIDGETS_JSON.read_text(encoding="utf-8"))["widgets"]
-        self.assertEqual(len(widgets), expected)
+        templates = {w.get("template") for w in widgets if isinstance(w, dict)}
+        # CLI-only administrative commands are not expected to be exposed as GUI widgets.
+        expected_gui_commands = [
+            cmd for cmd in expected_commands
+            if "uninstall.py" not in cmd and " --server" not in cmd
+        ]
+        missing = [cmd for cmd in expected_gui_commands if cmd not in templates]
+        self.assertEqual(missing, [], f"Missing widget templates for commands: {missing}")
 
 
 if __name__ == "__main__":
