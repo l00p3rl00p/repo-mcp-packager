@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexus Control Surface</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Nexus Control Surface</h1>
+      <p class="muted">GUI scaffold for CLI orchestration and observability</p>
+    </div>
+    <div class="tier-select">
+      <label for="tier">Mode</label>
+      <select id="tier">
+        <option value="lite">Lite</option>
+        <option value="standard">Standard</option>
+        <option value="permanent" selected>Permanent</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel widgets">
+      <div class="panel-head">
+        <h2>Widgets</h2>
+        <span class="muted">Unchecked means unavailable in selected mode</span>
+      </div>
+      <div id="widgetGrid" class="widget-grid"></div>
+    </section>
+
+    <section class="panel command-center">
+      <div class="panel-head">
+        <h2>Command Center</h2>
+        <span id="runStatus" class="badge idle">idle</span>
+      </div>
+      <div class="command-row">
+        <input id="widgetIdInput" type="text" placeholder="widget id">
+        <input id="argsInput" type="text" placeholder="optional args">
+      </div>
+      <div class="command-row">
+        <input id="commandInput" type="text" placeholder="Select a widget or type command">
+        <button id="runBtn">Run</button>
+      </div>
+      <pre id="behaviorOutput" class="terminal-like"></pre>
+    </section>
+
+    <section class="panel logs">
+      <div class="panel-head">
+        <h2>Logs</h2>
+        <span class="muted">Scaffold: wire to /api/logs</span>
+      </div>
+      <pre id="logsOutput" class="terminal-like">No logs loaded yet.</pre>
+    </section>
+
+    <section class="panel terminal">
+      <div class="panel-head">
+        <h2>Terminal</h2>
+        <span class="muted">Scaffold: wire to terminal session API</span>
+      </div>
+      <pre class="terminal-like">Terminal pane placeholder.
+Planned: session-backed stdin/stdout relay and command history.</pre>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standardized all documentation (.md) across the workspace using the `MD_FORMAT.md` reference.
 - Added proper Table of Contents and Quick Starts to all README files.
 - Consolidated User Outcome mission statements into dedicated files.
+- Added injector startup auto-detection and prompt flow (`--startup-detect`) for common MCP-capable IDE clients.
+- Added package-component-aware injection prompting for Nexus-created binaries (`nexus-activator`, `nexus-observer`, `nexus-surgeon`, `nexus-librarian`).
+- Added support alias `google-antigravity` for AI Studio client path selection.
+- Added tier-aware GUI command control surface scaffolding with full `COMMANDS.md` widget mapping.
+
+### Fixed
+- Fixed `serverinstaller/install.py` syntax/control-flow issue in `run()` that previously prevented execution.
+- Improved injector permission error handling for unwritable client config parent directories.
 
 ---
 

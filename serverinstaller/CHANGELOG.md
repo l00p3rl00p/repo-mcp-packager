@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Standardized all documentation using `MD_FORMAT.md`.
+- Clarified injector startup detect flow and multi-IDE prompting guidance in manual configuration docs.
 
----
+### Fixed
+- Repaired `install.py` control-flow/syntax path in `run()` to restore executable installer behavior.
 
 ## [0.5.0] - 2026-02-09
 

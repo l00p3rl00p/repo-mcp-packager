@@ -266,3 +266,19 @@ python serverinstaller/install.py --attach-to <ide-name>
 ```
 
 The installer handles all the bracket/comma logic automatically.
+
+---
+
+## Startup Auto-Detect (Recommended)
+
+The injector now supports startup discovery for common MCP-capable IDEs and prompts before injection.
+
+```bash
+python mcp_injector.py --startup-detect
+```
+
+Behavior:
+* Detects common clients (`claude`, `codex`, `cursor`, `vscode`, `xcode`, `aistudio`, `google-antigravity`).
+* Always includes **Claude** in the prompt set as a common injection target.
+* If the full Nexus package is detected (`~/.mcp-tools/bin`), it offers injection for package-created components (`nexus-activator`, `nexus-observer`, `nexus-surgeon`, `nexus-librarian`).
+* For each component, injection is explicit: **inject now** or **skip now**.

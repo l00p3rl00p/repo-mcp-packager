@@ -9,7 +9,7 @@ This document provides a complete list of commands for all modules in the Workfo
 
 | Action | Global Command | Direct Module Command |
 | :--- | :--- | :--- |
-| **Full Bootstrap** | `mcp-activator --industrial` | `python3 bootstrap.py --industrial` |
+| **Full Bootstrap** | `mcp-activator --permanent` | `python3 bootstrap.py --permanent` |
 | **Standard Install** | `mcp-activator --standard` | `python3 bootstrap.py --standard` |
 | **Lite Install** | `mcp-activator --lite` | `python3 bootstrap.py --lite` |
 | **Sync Workspace** | `mcp-activator --sync` | `python3 bootstrap.py --sync` |
@@ -40,8 +40,10 @@ This document provides a complete list of commands for all modules in the Workfo
 | **Remove Server** | `mcp-surgeon remove [client] [name]` | `python3 mcp_injector.py remove ...` |
 | **List Config** | `mcp-surgeon list [client]` | `python3 mcp_injector.py list ...` |
 | **Guided Mode** | `mcp-surgeon interactive` | `python3 mcp_injector.py interactive` |
+| **Startup Detect + Prompt Inject** | `mcp-surgeon --startup-detect` | `python3 mcp_injector.py --startup-detect` |
+| **List Known Clients** | `mcp-surgeon --list-clients` | `python3 mcp_injector.py --list-clients` |
 
-*Supported Clients: `claude`, `cursor`, `vscode`, `xcode`, `codex`, `aistudio`*
+*Supported Clients: `claude`, `cursor`, `vscode`, `xcode`, `codex`, `aistudio`, `google-antigravity` (alias of AI Studio)*
 
 ---
 
@@ -61,7 +63,7 @@ This document provides a complete list of commands for all modules in the Workfo
 ## 🌍 Directory Context Rules
 
 ### 1. Where to run what?
-*   **Autonomous Bootstrap**: Run `python3 bootstrap.py --industrial` from a standalone copy of the bootstrapper. It will automatically fetch the rest of the Workforce Nexus suite from GitHub if sibling repositories are not found.
+*   **Autonomous Bootstrap**: Run `python3 bootstrap.py --permanent` from a standalone copy of the bootstrapper. It will automatically fetch the rest of the Workforce Nexus suite from GitHub if sibling repositories are not found.
 *   **Installation/Dev Mode**: Run from the root of a full workspace.
 *   **Daily Global Use**: Once installed, run `mcp-surgeon`, `mcp-observer`, etc., from **any directory** in your terminal.
 *   **Standalone Installer**: Run `python3 serverinstaller/install.py` from the root of the repository you wish to package.
@@ -76,3 +78,13 @@ If `mcp-` commands are not found, add this to your `~/.zshrc` (macOS) or `~/.bas
 ```bash
 export PATH="$HOME/.mcp-tools/bin:$PATH"
 ```
+
+---
+
+## 🧩 GUI Widget Coverage
+
+The Nexus GUI scaffold in `repo-mcp-packager/gui/` now maps **every executable command** in this `COMMANDS.md` table to a widget action.
+
+* Widgets are **tier-gated** (`lite`, `standard`, `permanent`): unsupported actions render visually unchecked.
+* Widget execution routes through a safe backend allowlist (`widget_id`-based), then reports stdout/stderr and exit code.
+* Scope model is preserved: each repo remains standalone, while suite commands still assemble the integrated package.

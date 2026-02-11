@@ -59,7 +59,7 @@ All tiers include **Universal Safety (Pre-flight & Rollback)**.
 | :--- | :--- | :---: | :--- | :--- |
 | **Lite** | `--lite` | **Distributed** | Zero-Dep | Portable, Atomic Reversal, Auto-Chmod |
 | **Standard** | (Default) | **Linked** | Pure Python | Structural Audit, Regex Indexing, Symlinks |
-| **Industrial** | `--industrial` | **Unified** | Infrastructure | Managed Venv, `jsonschema`, `pathspec` |
+| **Industrial** | `--permanent` | **Unified** | Infrastructure | Managed Venv, `jsonschema`, `psutil`, `PyYAML` |
 
 ---
 
@@ -141,6 +141,18 @@ export PATH="$HOME/.mcp-tools/bin:$PATH"
 ### 2. Execution Directory
 *   **Installation/Sync:** Always run `bootstrap.py` from the `repo-mcp-packager` root.
 *   **Daily Use:** Once installed, all `mcp-` commands can be executed from **any directory** within your workspace.
+
+---
+
+## 🧩 GUI Control Surface (Tier-Aware)
+
+The GUI scaffold in `repo-mcp-packager/gui/` is a control surface over CLI behavior:
+
+*   **Lite**: only lite-safe actions should run; non-lite actions appear visually unchecked.
+*   **Standard**: enables linked-workspace actions and operational commands.
+*   **Permanent**: enables hardened infrastructure actions (managed venv/path/integrity workflows).
+
+The widget model maps to the command catalog and executes through an allowlisted backend runner, reporting command output and status.
 
 ---
 

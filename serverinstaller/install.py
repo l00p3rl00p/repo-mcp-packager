@@ -719,140 +719,140 @@ requires-python = ">=3.6"
                     self.error("Python version incompatible.")
 
             discovery = self.discover_project()
-        
-        # Handle simple scripts (Philosophy: not every repo is a product)
-        if discovery["simple_script"]:
-            self.handle_simple_script(discovery)
-            return
-        
-        # Handle "documents only" projects
-        is_code_project = any([
-            discovery["python_project"],
-            discovery["npm_project"],
-            discovery["gui_project"],
-            discovery["docker_project"],
-            discovery["python_requirements"],
-            discovery["python_setup"]
-        ])
-
-        if not is_code_project and not self.args.generate_bridge:
-            print("\n" + "!"*50)
-            print("📎 DISCOVERY: DOCUMENTS & FOLDERS")
-            print("!"*50)
-            print("\nSeems this is just documents or folders.")
-            print("There are no standard project files (no package.json, pyproject.toml, etc.)")
-            print("detected, so there is nothing to automate or 'install' by default.")
-            print("\nBUT: I can turn this directory into a searchable MCP Knowledge Base")
-            print("by pulling down and configuring the 'mcp-link-library' for you.")
             
-            if not self.args.headless:
-                print("Options:")
-                print("  [y] Yes, set up MCP server (clones mcp-link-library)")
-                print("  [n] No, keep as-is")
-                print("  [q] Abort installation")
+            # Handle simple scripts (Philosophy: not every repo is a product)
+            if discovery["simple_script"]:
+                self.handle_simple_script(discovery)
+                return
+            
+            # Handle "documents only" projects
+            is_code_project = any([
+                discovery["python_project"],
+                discovery["npm_project"],
+                discovery["gui_project"],
+                discovery["docker_project"],
+                discovery["python_requirements"],
+                discovery["python_setup"]
+            ])
+
+            if not is_code_project and not self.args.generate_bridge:
+                print("\n" + "!"*50)
+                print("📎 DISCOVERY: DOCUMENTS & FOLDERS")
+                print("!"*50)
+                print("\nSeems this is just documents or folders.")
+                print("There are no standard project files (no package.json, pyproject.toml, etc.)")
+                print("detected, so there is nothing to automate or 'install' by default.")
+                print("\nBUT: I can turn this directory into a searchable MCP Knowledge Base")
+                print("by pulling down and configuring the 'mcp-link-library' for you.")
                 
-                choice = input("\nChoice [y/n/q]: ").strip().lower()
-                
-                if choice in ['q', 'n']:
-                    print("\n❎ Skipping setup. You can always use the library later:")
-                    print("   👉 https://github.com/l00p3rl00p/mcp-link-library\n")
-                    sys.exit(0)
-                
-                if choice == 'y':
-                    engine_dir = self.project_root / "mcp-link-library"
-                    if engine_dir.exists():
-                        print(f"[*] Engine directory {engine_dir.name} already exists. Skipping clone.")
-                    else:
-                        print(f"[*] Pulling mcp-link-library into {engine_dir.name}...")
-                        try:
-                            # SECURITY: Use check=True to fail fast on network/git errors
-                            subprocess.run(
-                                ["git", "clone", "https://github.com/l00p3rl00p/mcp-link-library", str(engine_dir)],
-                                check=True
-                            )
-                        except Exception as e:
-                            self.error(f"Failed to clone link library: {e}")
+                if not self.args.headless:
+                    print("Options:")
+                    print("  [y] Yes, set up MCP server (clones mcp-link-library)")
+                    print("  [n] No, keep as-is")
+                    print("  [q] Abort installation")
                     
-                    # Run the engine's installer
-                    engine_installer = engine_dir / "bootstrap.py"
-                    if not engine_installer.exists():
-                        engine_installer = engine_dir / "install.py"
+                    choice = input("\nChoice [y/n/q]: ").strip().lower()
                     
-                    if engine_installer.exists():
-                        print(f"[*] Bootstrapping the new engine...")
-                        # Run the engine's installer with --attach-to all if possible
-                        cmd = [sys.executable, str(engine_installer)]
-                        if self.args.attach_to:
-                            cmd.extend(["--attach-to"] + self.args.attach_to)
-                        
-                        subprocess.run(cmd, cwd=engine_dir)
-                        print("\n✅ Knowledge Base setup complete!")
+                    if choice in ['q', 'n']:
+                        print("\n❎ Skipping setup. You can always use the library later:")
+                        print("   👉 https://github.com/l00p3rl00p/mcp-link-library\n")
                         sys.exit(0)
+                    
+                    if choice == 'y':
+                        engine_dir = self.project_root / "mcp-link-library"
+                        if engine_dir.exists():
+                            print(f"[*] Engine directory {engine_dir.name} already exists. Skipping clone.")
+                        else:
+                            print(f"[*] Pulling mcp-link-library into {engine_dir.name}...")
+                            try:
+                                subprocess.run(
+                                    ["git", "clone", "https://github.com/l00p3rl00p/mcp-link-library", str(engine_dir)],
+                                    check=True
+                                )
+                            except Exception as e:
+                                self.error(f"Failed to clone link library: {e}")
+                        
+                        engine_installer = engine_dir / "bootstrap.py"
+                        if not engine_installer.exists():
+                            engine_installer = engine_dir / "install.py"
+                        
+                        if engine_installer.exists():
+                            print(f"[*] Bootstrapping the new engine...")
+                            cmd = [sys.executable, str(engine_installer)]
+                            if self.args.attach_to:
+                                cmd.extend(["--attach-to"] + self.args.attach_to)
+                            
+                            subprocess.run(cmd, cwd=engine_dir)
+                            print("\n✅ Knowledge Base setup complete!")
+                            sys.exit(0)
+                        else:
+                            self.error("Found the engine but couldn't find its installer (bootstrap.py or install.py).")
                     else:
-                        self.error("Found the engine but couldn't find its installer (bootstrap.py or install.py).")
+                        print("\n❎ Skipping setup. Use https://github.com/l00p3rl00p/mcp-link-library manually if needed.")
+                        sys.exit(0)
                 else:
-                    print("\n❎ Skipping setup. Use https://github.com/l00p3rl00p/mcp-link-library manually if needed.")
+                    self.log("Headless mode: Skipping auto-scaffold to avoid side-effects. Use manually.")
                     sys.exit(0)
-            else:
-                self.log("Headless mode: Skipping auto-scaffold to avoid side-effects. Use manually.")
-                sys.exit(0)
 
-        # Component Selection
-        install_choices = {
-            "python": discovery["python_project"],
-            "gui": discovery["gui_project"] and not self.args.no_gui,
-            "knowledge_base": False, 
-        }
+            install_choices = {
+                "python": discovery["python_project"],
+                "gui": discovery["gui_project"] and not self.args.no_gui,
+                "knowledge_base": False,
+            }
 
-        if not self.args.headless:
-            print("\n" + "="*40)
-            print("COMPONENT INVENTORY".center(40))
-            print("="*40)
-            print(" (Enter 'q' at any prompt to abort)")
-            print("-" * 40)
-            
-            if discovery["python_project"]:
-                choice = input("Install Python Server/CLI? [Y/n/q]: ").strip().lower()
-                if choice == 'q': sys.exit(0)
-                install_choices["python"] = choice != 'n'
-            
-            if discovery["gui_project"]:
-                choice = input("Install GUI Frontend? [Y/n/q]: ").strip().lower()
-                if choice == 'q': sys.exit(0)
-                install_choices["gui"] = choice != 'n'
-            
-            # Always offer Knowledge Base
-            choice = input("Install Knowledge Base (Librarian)? [Y/n/q]: ").strip().lower()
-            if choice == 'q': sys.exit(0)
-            install_choices["knowledge_base"] = choice != 'n'
-
-            if not any(install_choices.values()):
-                print("\nNo components selected for installation.")
-                if input("Exit now? [Y/n]: ").strip().lower() != 'n':
-                    sys.exit(0)
+            if not self.args.headless:
+                print("\n" + "="*40)
+                print("COMPONENT INVENTORY".center(40))
+                print("="*40)
+                print(" (Enter 'q' at any prompt to abort)")
+                print("-" * 40)
                 
-            print("="*40 + "\n")
+                if discovery["python_project"]:
+                    choice = input("Install Python Server/CLI? [Y/n/q]: ").strip().lower()
+                    if choice == 'q':
+                        sys.exit(0)
+                    install_choices["python"] = choice != 'n'
+                
+                if discovery["gui_project"]:
+                    choice = input("Install GUI Frontend? [Y/n/q]: ").strip().lower()
+                    if choice == 'q':
+                        sys.exit(0)
+                    install_choices["gui"] = choice != 'n'
+                
+                choice = input("Install Knowledge Base (Librarian)? [Y/n/q]: ").strip().lower()
+                if choice == 'q':
+                    sys.exit(0)
+                install_choices["knowledge_base"] = choice != 'n'
 
-        if install_choices["python"]:
-            self.setup_venv()
-            self.install_python_deps(discovery)
-        
-        if install_choices.get("knowledge_base"):
-            self.handle_knowledge_base(discovery)
+                if not any(install_choices.values()):
+                    print("\nNo components selected for installation.")
+                    if input("Exit now? [Y/n]: ").strip().lower() != 'n':
+                        sys.exit(0)
+                    
+                print("="*40 + "\n")
+
+            if install_choices["python"]:
+                self.setup_venv()
+                self.install_python_deps(discovery)
             
-        if install_choices["gui"]:
-            self.setup_npm(discovery)
-        
-        # MCP Bridge handling (if requested)
-        if self.args.generate_bridge or self.args.attach_to:
-            self.handle_mcp_bridge(discovery)
-        
-        audit_dict = asdict(audit) if hasattr(audit, '__dict__') else audit
-        if install_choices["python"]:
-            self.setup_path(audit_dict)
-        
-        self.write_manifest(audit_dict)
-        self.log("Installation complete.")
+            if install_choices.get("knowledge_base"):
+                self.handle_knowledge_base(discovery)
+                
+            if install_choices["gui"]:
+                self.setup_npm(discovery)
+            
+            if self.args.generate_bridge or self.args.attach_to:
+                self.handle_mcp_bridge(discovery)
+            
+            audit_dict = asdict(audit) if hasattr(audit, '__dict__') else audit
+            if install_choices["python"]:
+                self.setup_path(audit_dict)
+            
+            self.write_manifest(audit_dict)
+            self.log("Installation complete.")
+        except Exception:
+            self.rollback()
+            raise
 
 def main():
     parser = argparse.ArgumentParser(description="Shesha Clean Room Installer")
