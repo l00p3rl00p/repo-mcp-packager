@@ -81,16 +81,22 @@ The `uninstall.py` tool uses the **Nexus Manifest Layer** to ensure zero-residue
 
 
 
-# Application Convergence & Synergy
-The "Nexus Application" mode is triggered when the bootstrapper detects all four modules (mcp-injector, mcp-link-library, mcp-server-manager, repo-mcp-packager) in the same workspace.
+## 🏢 The Nexus Convergence Model
+The Activator supports three tiers of organizational binding:
 
-Convergence Matrix (Organization & Areas)
-Feature	Lite (Loose Binding)	Standard (Close Binding)	Industrial (Managed App)
-Philosophy	"Distributed & Portable"	"Cohesive & Linked"	"Monolithic & Hardened"
-Logic Area	Repos remain in workspace	~/.mcp-tools/suite (Symlinks)	~/.mcp-tools/app (Managed Mirror)
-Shared Base	~/.mcp-tools/lite/	~/.mcp-tools/standard/	~/.mcp-tools/industrial/
-Environment	OS-Default / Manual Venv	Per-module local venvs	Single Unified Hardened Venv
-Update Path	Manual per repo	Live (via Symlinks)	On-Demand (nexus-sync)
-Global Path	Optional (Local first)	Recommended	Mandatory Enforcement
+| Feature | Lite (Loose Binding) | Standard (Close Binding) | Industrial (Managed App) |
+| :--- | :--- | :--- | :--- |
+| **Logic Area** | Repos remain in workspace | `~/.mcp-tools/suite` (Symlinks) | `~/.mcp-tools/app` (Managed) |
+| **Environment** | OS-Default / Manual | Per-module venvs | Unified Hardened Venv |
+| **Update Path** | Manual per repo | Live (via Symlinks) | On-Demand (`nexus-sync`) |
 
+---
 
+## 📚 Master Documentation
+For the complete suite experience and detailed procedures, see:
+👉 **[NEXUS_GUIDE.md](./NEXUS_GUIDE.md)**
+
+---
+
+> **Author**: l00p3rl00p / Workforce Nexus
+> **Reference**: [ARCHITECTURE.md](./ARCHITECTURE.md) | [ENVIRONMENT.md](./ENVIRONMENT.md)

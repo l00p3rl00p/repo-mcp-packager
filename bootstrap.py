@@ -1,8 +1,51 @@
 import os, sys, shutil, platform, argparse, hashlib, subprocess
 from pathlib import Path
 
+# Workforce Nexus Global Registry
+GITHUB_ROOT = "https://github.com/l00p3rl00p"
+NEXUS_REPOS = {
+    'mcp-injector': f"{GITHUB_ROOT}/mcp-injector.git",
+    'mcp-link-library': f"{GITHUB_ROOT}/mcp-link-library.git",
+    'mcp-server-manager': f"{GITHUB_ROOT}/mcp-server-manager.git",
+    'repo-mcp-packager': f"{GITHUB_ROOT}/repo-mcp-packager.git"
+}
+
 # Track artifacts for universal rollback
 INSTALLED_ARTIFACTS = []
+
+def git_available():
+    try:
+        subprocess.run(["git", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except:
+        return False
+
+def fetch_nexus_repo(name: str, target_dir: Path, update=False):
+    """Fetch a repo from GitHub if missing, or update if requested."""
+    url = NEXUS_REPOS.get(name)
+    if not url: return False
+    
+    if not git_available():
+        print(f"❌ Git not found. Cannot manage {name} automatically.")
+        return False
+        
+    try:
+        if target_dir.exists() and (target_dir / ".git").exists():
+            if update:
+                print(f"🔄 Updating {name}...")
+                subprocess.run(["git", "-C", str(target_dir), "pull"], check=True)
+                return True
+            return True
+            
+        print(f"📥 Fetching {name} from GitHub...")
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+            
+        subprocess.run(["git", "clone", "--depth", "1", url, str(target_dir)], check=True)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to fetch/update {name}: {e}")
+        return False
 
 def get_mcp_tools_home():
     if platform.system() == "Windows":
@@ -10,18 +53,30 @@ def get_mcp_tools_home():
     return Path.home() / ".mcp-tools"
 
 def get_workspace_root():
-    """Find workspace by looking for sibling repos."""
-    current = Path(__file__).parent
-    parent = current.parent
+    """Find workspace by looking for sibling repos, searching upwards if needed."""
+    # Start looking from the directory containing this script
+    search_start = Path(__file__).resolve().parent
     siblings = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
-    found = [s for s in siblings if (parent / s).exists()]
-    return parent if len(found) >= 2 else None
+    
+    # Check current parent and up to 3 levels higher
+    current = search_start
+    for _ in range(4):
+        parent = current.parent
+        if parent == current: break # Hit root
+        
+        found = [s for s in siblings if (parent / s).is_dir()]
+        if len(found) >= 2:
+            return parent
+        current = parent
+        
+    return None
 
 def detect_which_repo():
     return Path(__file__).parent.name
 
 def detect_full_suite(workspace: Path):
     """Check if we are in a Workforce Nexus workspace (all 4 repos)."""
+    if not workspace: return False
     required = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
     missing = [r for r in required if not (workspace / r).exists()]
     return len(missing) == 0
@@ -132,41 +187,43 @@ def ensure_executable(path: Path):
         for item in path.iterdir():
             ensure_executable(item)
 
-def install_to_central(central, workspace):
+def install_to_central(central, workspace=None, update=False):
+    """Deploy repos to central location (~/.mcp-tools). Fetches from Git if workspace is missing."""
     central.mkdir(parents=True, exist_ok=True)
     
     # Define our components
     repos = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
     
     for repo in repos:
-        source = workspace / repo
+        source = workspace / repo if (workspace and (workspace / repo).exists()) else None
         target = central / repo
         
-        if not source.exists():
-            print(f"⚠️  Skipping {repo}: Not found in workspace")
-            continue
+        if source:
+            # Mode A: Active Workspace Copy (Developer Mode)
+            if target.exists():
+                try:
+                    shutil.rmtree(target)
+                except Exception as e:
+                    print(f"❌ Failed to remove existing {repo}: {e}")
+                    raise e
             
-        if target.exists():
-            # If target exists, we update it by removing and re-copying
             try:
-                shutil.rmtree(target)
+                # We copy the source. If it has .git, we copy it too (optional, but requested for 'can be updated')
+                shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '.venv', 'node_modules', '.DS_Store'))
+                INSTALLED_ARTIFACTS.append(target)
+                ensure_executable(target)
+                print(f"✅ Installed {repo} (Local Source)")
             except Exception as e:
-                print(f"❌ Failed to remove existing {repo}: {e}")
-                raise e # Trigger rollback
-        
-        try:
-            # Ignore __pycache__, .git, .venv, node_modules to keep it clean
-            shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '.git', '.venv', 'node_modules', '.DS_Store'))
-            INSTALLED_ARTIFACTS.append(target)
-            
-            # Phase 9: Permissions Hardening
-            ensure_executable(target)
-            
-            print(f"✅ Installed {repo}")
-        except Exception as e:
-            print(f"❌ Failed to copy {repo}: {e}")
-            raise e # Trigger rollback
-            continue
+                print(f"❌ Failed to copy {repo}: {e}")
+                raise e
+        else:
+            # Mode B: GitHub Discovery (Autonomous/Standalone Mode)
+            if fetch_nexus_repo(repo, target, update=update):
+                if target not in INSTALLED_ARTIFACTS:
+                    INSTALLED_ARTIFACTS.append(target)
+                ensure_executable(target)
+            else:
+                print(f"⚠️  Skipping {repo}: Source not found and fetch failed.")
 
         if repo == 'repo-mcp-packager':
             uninstall_src = target / "serverinstaller" / "uninstall.py"
@@ -179,7 +236,7 @@ def install_to_central(central, workspace):
                 except Exception as e:
                     print(f"⚠️  Failed to expose uninstall.py: {e}")
 
-def install_converged_application(tier, workspace):
+def install_converged_application(tier, workspace, update=False):
     """Phase 12: Application Convergence Logic."""
     central = get_mcp_tools_home()
     central.mkdir(parents=True, exist_ok=True)
@@ -209,17 +266,32 @@ def install_converged_application(tier, workspace):
             print(f"🔗 Linked {repo} -> {dest}")
             
     elif tier == 'industrial':
-        # Industrial: Managed Mirror (Copy)
+        # Industrial: Managed Mirror (Copy/Git)
         # We reuse install_to_central logic but ensure global venv
-        install_to_central(central, workspace)
+        install_to_central(central, workspace, update=update)
         setup_nexus_venv(central)
         create_hardened_entry_points(central)
         ensure_global_path(central)
         # Trigger Librarian Synergy (Lazy sync)
         print("🧠 Triggering Librarian Suite Indexing...")
-        subprocess.run([sys.executable, str(central / "mcp-link-library" / "mcp.py"), "--index-suite"], check=False)
+        try:
+            subprocess.run([sys.executable, str(central / "mcp-link-library" / "mcp.py"), "--index-suite"], check=False)
+        except Exception as e:
+            print(f"⚠️  Indexing minor issue: {e} (Installation still successful)")
 
-    print(f"\n✨ Convergence Complete! Your Nexus is ready in {tier} mode.")
+    print("\n" + "="*60)
+    print(f"✅  INSTALLATION SUCCESSFUL (Tier: {tier.upper()})")
+    print("="*60)
+    print(f"Your Nexus environment is fully configured.")
+    print(f"Tools available in: {central}/bin")
+    print("-" * 60)
+    print(f"📊 GUI Dashboard Access:")
+    print(f"   Command: mcp-observer gui")
+    print(f"   URL:     http://localhost:8501")
+    print("-" * 60)
+    print(f"Log out and back in to refresh your path, or run:")
+    print(f"  source ~/.zshrc  (or ~/.bashrc)")
+    print("="*60 + "\n")
 
 def setup_nexus_venv(central: Path):
     """Create a dedicated Nexus venv for --industrial mode."""
@@ -235,8 +307,17 @@ def setup_nexus_venv(central: Path):
         else:
             pip = venv_dir / "bin" / "pip"
             
-        print("📥 Installing high-confidence libraries (pathspec, jsonschema)...")
-        subprocess.run([str(pip), "install", "pathspec", "jsonschema"], check=True)
+        # 1. Upgrade pip to silence warnings and ensure compatibility
+        print("⬆️  Upgrading pip to latest version...")
+        try:
+            subprocess.run([str(pip), "install", "--upgrade", "pip"], check=True)
+        except subprocess.CalledProcessError:
+            print("⚠️  Pip upgrade failed, attempting to continue with current version...")
+
+        print("📥 Installing high-confidence libraries (pathspec, jsonschema, psutil, PyYAML)...")
+        # 2. Allow interactive prompts if packages need them
+        subprocess.run([str(pip), "install", "pathspec", "jsonschema", "psutil", "PyYAML"], check=True)
+        
         print("✅ Nexus Venv ready.")
         return True
     except Exception as e:
@@ -300,15 +381,15 @@ def create_hardened_entry_points(central: Path):
         print("⚠️  Hardened venv not found. Using system python for entry points.")
         venv_python = sys.executable
 
-    # Command mapping: entry_name -> (repo_dir, module_name)
+    # Command mapping: entry_name -> (repo_dir, module_path, use_python_m)
     commands = {
-        "mcp-surgeon": ("mcp-injector", "mcp_injector.py"),
-        "mcp-observer": ("mcp-server-manager", "mcp_server_manager.py"),
-        "mcp-librarian": ("mcp-link-library", "mcp.py"),
-        "mcp-activator": ("repo-mcp-packager", "bootstrap.py") # Bootstrap acts as activator
+        "mcp-surgeon": ("mcp-injector", "mcp_injector.py", False),
+        "mcp-observer": ("mcp-server-manager", "mcp_inventory/cli.py", True), # Uses -m mcp_inventory.cli
+        "mcp-librarian": ("mcp-link-library", "mcp.py", False),
+        "mcp-activator": ("repo-mcp-packager", "bootstrap.py", False)
     }
     
-    for cmd, (repo, module) in commands.items():
+    for cmd, (repo, module, use_m) in commands.items():
         cmd_path = bin_dir / cmd
         target_script = central / repo / module
         
@@ -316,8 +397,19 @@ def create_hardened_entry_points(central: Path):
             continue
             
         # Write the hardened wrapper
-        wrapper = f"""#!/bin/bash
+        # We add 'central' to PYTHONPATH so modules like mcp_inventory can be found
+        if use_m:
+            # For mcp-observer, we want `python -m mcp_inventory.cli`
+            module_name = module.replace("/", ".").replace(".py", "")
+            wrapper = f"""#!/bin/bash
 # Workforce Nexus Hardened Wrapper
+export PYTHONPATH="{central}/mcp-server-manager:$PYTHONPATH"
+"{venv_python}" -m {module_name} "$@"
+"""
+        else:
+            wrapper = f"""#!/bin/bash
+# Workforce Nexus Hardened Wrapper
+export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/repo-mcp-packager:$PYTHONPATH"
 "{venv_python}" "{target_script}" "$@"
 """
         try:
@@ -352,30 +444,56 @@ def generate_integrity_manifest(central: Path):
 def main():
     parser = argparse.ArgumentParser(description="Nexus Bootstrap - Tiered Reliability")
     parser.add_argument("--lite", action="store_true", help="Lite mode (Zero-Dep)")
-    parser.add_argument("--industrial", action="store_true", help="Industrial mode (Infrastructure)")
+    parser.add_argument("--industrial", "--permanent", action="store_true", dest="industrial", help="Industrial mode (Infrastructure)")
     parser.add_argument("--sync", action="store_true", help="Sync Industrial Nexus from workspace (Update logic)")
     parser.add_argument("--strategy", choices=["full", "step"], help="Installation strategy")
     parser.add_argument("--gui", action="store_true", help="Launch GUI after installation")
+    parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
     args = parser.parse_args()
 
     if args.sync:
         workspace = get_workspace_root()
         if not workspace:
-            print("❌ Cannot find workspace to sync from.")
-            sys.exit(1)
-        print("🔄 Syncing Industrial Nexus from workspace...")
-        install_converged_application('industrial', workspace)
+            print("🔄 No workspace found. Syncing Industrial Nexus via GitHub...")
+            install_converged_application('industrial', None, update=True)
+            return
+        print(f"🔄 Syncing Industrial Nexus from local workspace: {workspace}")
+        install_converged_application('industrial', workspace, update=True)
         return
 
     if sys.version_info < (3,6):
         print("❌ Python 3.6+ required")
         sys.exit(1)
     
-    
     workspace = get_workspace_root()
+    
+    # Check if we are being run from within a potential target project
+    target_project = Path(__file__).resolve().parent.parent
+    has_project_files = any((target_project / f).exists() for f in ['package.json', 'pyproject.toml', 'requirements.txt', 'setup.py'])
+    
     if not workspace:
-        print("❌ Cannot find workspace (need sibling repos)")
-        sys.exit(1)
+        # Case A: Standalone Mode (Copied into another repo)
+        if has_project_files and target_project.name not in ['mcp-injector', 'mcp-server-manager', 'mcp-link-library', 'repo-mcp-packager']:
+            print(f"🎯 Target Project Detected: {target_project.name}")
+            print(f"[*] This looks like a standalone setup for {target_project.name}.")
+            
+            installer = Path(__file__).parent / "serverinstaller" / "install.py"
+            if installer.exists():
+                print(f"🚀 Launching Standalone Installer...")
+                os.execv(sys.executable, [sys.executable, str(installer)] + sys.argv[1:])
+        
+        # Case B: Autonomous Mode (Suite Install from GitHub)
+        print("[*] No local Nexus workspace found. Entering Autonomous Mode...")
+        if not args.industrial and not args.lite and not args.strategy:
+             print("⚠️  No deployment tier selected. To install the Workforce Nexus suite from GitHub, use:")
+             print("   python bootstrap.py --industrial")
+             sys.exit(1)
+    elif has_project_files and target_project.name not in ['mcp-injector', 'mcp-server-manager', 'mcp-link-library', 'repo-mcp-packager']:
+        # Case C: Developer Workspace + Standalone Target
+        print(f"🎯 Target Project Detected: {target_project.name}")
+        installer = Path(__file__).parent / "serverinstaller" / "install.py"
+        if installer.exists():
+            os.execv(sys.executable, [sys.executable, str(installer)] + sys.argv[1:])
         
     # Phase 12: Convergence Check
     if detect_full_suite(workspace):
@@ -384,8 +502,12 @@ def main():
             tier = ask_convergence_tier()
             install_converged_application(tier, workspace)
             return
+    else:
+        # Partial or Autonomous Mode
+        if workspace:
+            print(f"⚠️  Partial workspace detected at {workspace}")
+            print("   Proceeding with standard installation for available repos.")
             
-    # Legacy/Single Repo Flow
     # Resolve strategy and tier
     if args.lite or args.industrial or args.strategy:
         strategy = args.strategy or "full"
@@ -407,7 +529,7 @@ def main():
 
     try:
         if strategy == 'full':
-            install_to_central(central, workspace)
+            install_to_central(central, workspace, update=args.force)
             
             if tier == 'industrial':
                 setup_nexus_venv(central)
@@ -422,7 +544,7 @@ def main():
                 print("💡 Try running 'mcp-surgeon --help' in a new terminal.")
         elif strategy == 'step':
             if ask("Install to central location?"): 
-                install_to_central(central, workspace)
+                install_to_central(central, workspace, update=args.force)
                 
                 if tier == 'industrial':
                     if ask("Setup Nexus Venv and dependencies?"):
@@ -443,19 +565,29 @@ def main():
     # Post-Install GUI Launch
     if args.gui:
         print("\n🚀 Launching GUI Dashboard...")
+        # Use the hardened entry point if it exists, otherwise fall back to manual logic
+        observer_bin = central / "bin" / "mcp-observer"
+        
         try:
-            if platform.system() == "Windows":
-                 # Windows doesn't like execv overlay as much, subproc better
-                subprocess.run([sys.executable, "-m", "mcp_inventory.cli", "gui"])
+            if observer_bin.exists():
+                os.execl(str(observer_bin), str(observer_bin), "gui")
             else:
-                # Try to launch via the start script if available for better context
-                start_script = Path(__file__).parent / "start_gui.sh"
-                if start_script.exists():
-                     os.execl(str(start_script), str(start_script))
-                else:
-                     os.execl(sys.executable, sys.executable, "-m", "mcp_inventory.cli", "gui")
+                # Manual fallback with explicit PYTHONPATH
+                venv_python = central / ".venv" / "bin" / "python"
+                if platform.system() == "Windows":
+                    venv_python = central / ".venv" / "Scripts" / "python.exe"
+                
+                if not venv_python.exists():
+                    venv_python = sys.executable
+                
+                env = os.environ.copy()
+                env["PYTHONPATH"] = f"{central}/mcp-server-manager:{env.get('PYTHONPATH', '')}"
+                
+                cmd = [str(venv_python), "-m", "mcp_inventory.cli", "gui"]
+                subprocess.run(cmd, env=env)
         except Exception as e:
             print(f"⚠️  Failed to launch GUI: {e}")
+            print("   Try running it manually: mcp-observer gui")
 
 if __name__ == "__main__":
     main()

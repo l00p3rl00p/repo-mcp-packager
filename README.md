@@ -99,17 +99,48 @@ Detailed technical manuals for engineering reference:
 
 
 
-## 🖥️ Launching the Dashboard
+## 🛠️ Workforce Nexus Command Reference
 
-For a visual overview of your Nexus, use the provided helper script or CLI command:
+| Tool | Shared Command | Direct Module Execution | Responsibility |
+| :--- | :--- | :--- | :--- |
+| **Activator** | `mcp-activator` | `python3 bootstrap.py` | Orchestration, Installation, Sync |
+| **Observer** | `mcp-observer` | `python3 -m mcp_inventory.cli` | UI/GUI, Health, Inventory |
+| **Surgeon** | `mcp-surgeon` | `python3 mcp_injector.py` | Injection, Config Hardening |
+| **Librarian** | `mcp-librarian` | `python3 mcp.py` | Knowledge SQLite, URL Persistence |
+
+---
+
+## 🖥️ GUI Management (The Observer Dashboard)
+
+The **Observer GUI** is your primary interface for monitoring the health and connection status of all Nexus components.
+
+*   **To Launch:**
+    ```bash
+    mcp-observer gui
+    # OR (Direct)
+    python3 -m mcp_inventory.cli gui
+    ```
+*   **Dashboard URL:** [http://localhost:8501](http://localhost:8501)
+*   **To Stop:**
+    - Press `Ctrl + C` in the terminal where the GUI is running.
+    - Closing the terminal session will also terminate the server.
+*   **To Restart:** Simply run the launch command again. The GUI will automatically re-index the current inventory.
+
+---
+
+## 🌍 Global Path & Workspace Context
+
+### 1. Setting the PATH
+For the `mcp-` commands to work from any directory, ensure your shell configuration (`~/.zshrc` or `~/.bashrc`) includes the Nexus bin directory:
 
 ```bash
-./start_gui.sh
-# OR
-python3 -m mcp_inventory.cli gui
+export PATH="$HOME/.mcp-tools/bin:$PATH"
 ```
+*(The Industrial/Standard bootstrap attempts to automate this step during installation.)*
 
-Open your browser to `http://localhost:8501`.
+### 2. Execution Directory
+*   **Installation/Sync:** Always run `bootstrap.py` from the `repo-mcp-packager` root.
+*   **Daily Use:** Once installed, all `mcp-` commands can be executed from **any directory** within your workspace.
 
 ---
 
