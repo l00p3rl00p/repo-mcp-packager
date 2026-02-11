@@ -6,6 +6,7 @@ import sys
 import datetime
 from pathlib import Path
 from typing import List
+from typing import Optional
 
 # Import attach module for MCP removal
 try:
@@ -20,17 +21,138 @@ def get_mcp_tools_home():
         return Path(os.environ['USERPROFILE']) / ".mcp-tools"
     return Path.home() / ".mcp-tools"
 
+def _home() -> Path:
+    return Path(os.environ.get("HOME") or str(Path.home())).expanduser()
+
+def _devlog_dir() -> Path:
+    # Keep devlogs outside ~/.mcp-tools so a purge can still leave a forensic trail (when requested).
+    return _home() / ".mcpinv" / "devlogs"
+
+def _prune_old_devlogs(devlog_dir: Path, days: int = 90, verbose: bool = False) -> None:
+    try:
+        devlog_dir.mkdir(parents=True, exist_ok=True)
+        cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
+        for p in devlog_dir.glob("nexus-*.jsonl"):
+            try:
+                mtime = datetime.datetime.fromtimestamp(p.stat().st_mtime)
+                if mtime < cutoff:
+                    if verbose:
+                        print(f"[-] Pruning old devlog: {p}")
+                    p.unlink(missing_ok=True)
+            except Exception:
+                continue
+    except Exception:
+        return
+
+def _devlog_path() -> Path:
+    # One file per day to simplify retention pruning.
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d")
+    return _devlog_dir() / f"nexus-{stamp}.jsonl"
+
+def _write_devlog(path: Path, event: str, data: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+            "event": event,
+            **data,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        # devlog should never block uninstall
+        return
+
+def _confirm(prompt: str) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    r = input(f"{prompt} [y/N]: ").strip().lower()
+    return r == "y" or r == "yes"
+
+def _remove_path_block(verbose: bool = False, devlog: Optional[Path] = None) -> None:
+    """
+    Remove PATH injection block created by bootstrap.py ensure_global_path().
+    This is intentionally limited to known marker strings; no directory traversal.
+    """
+    marker_start = "# Workforce Nexus Block START"
+    marker_end = "# Workforce Nexus Block END"
+
+    shell = os.environ.get("SHELL", "")
+    candidates: List[Path] = []
+    if "zsh" in shell:
+        candidates.append(_home() / ".zshrc")
+    if "bash" in shell:
+        candidates.append(_home() / ".bashrc")
+    # Also try both common files if shell env is missing.
+    candidates.extend([_home() / ".zshrc", _home() / ".bashrc"])
+
+    seen = set()
+    for rc in candidates:
+        if rc in seen:
+            continue
+        seen.add(rc)
+        if not rc.exists() or not rc.is_file():
+            continue
+        try:
+            content = rc.read_text(encoding="utf-8", errors="ignore").splitlines()
+            if marker_start not in "\n".join(content):
+                continue
+
+            backup = rc.with_suffix(rc.suffix + f".backup.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
+            try:
+                backup.write_text("\n".join(content) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+
+            new_lines = []
+            inside = False
+            for line in content:
+                if line.strip() == marker_start:
+                    inside = True
+                    continue
+                if line.strip() == marker_end:
+                    inside = False
+                    continue
+                if not inside:
+                    new_lines.append(line)
+            rc.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            if verbose:
+                print(f"[-] Removed PATH block from {rc} (backup: {backup})")
+            if devlog:
+                _write_devlog(devlog, "path_block_removed", {"file": str(rc), "backup": str(backup)})
+        except Exception:
+            continue
+
+
 class SheshaUninstaller:
-    def __init__(self, project_root: Path, kill_venv: bool = False, purge_data: bool = False):
+    def __init__(
+        self,
+        project_root: Path,
+        kill_venv: bool = False,
+        purge_data: bool = False,
+        verbose: bool = False,
+        devlog: Optional[Path] = None,
+        yes: bool = False,
+    ):
         self.project_root = project_root
         self.kill_venv = kill_venv
         self.purge_data = purge_data
+        self.verbose = verbose
+        self.devlog = devlog
+        self.yes = yes
         self.manifest_path = self.project_root / ".librarian" / "manifest.json"
 
     def log(self, msg: str):
         print(f"[-] {msg}")
+        if self.devlog:
+            _write_devlog(self.devlog, "log", {"message": msg})
 
     def run(self):
+        # If purge_data is requested, we operate in "central-only" mode. We do NOT scan the disk
+        # and we do NOT attempt to clean workspace artifacts automatically.
+        if self.purge_data:
+            return self.run_central_only()
+
         if not self.manifest_path.exists():
             print(f"⚠️  No installation manifest found at {self.manifest_path}.")
             print("   Proceeding with directory clean-up mode (fallback).")
@@ -125,6 +247,112 @@ class SheshaUninstaller:
         else:
             self.remove_nexus(force=False)
 
+    def run_central_only(self):
+        nexus = get_mcp_tools_home()
+        mcpinv = _home() / ".mcpinv"
+
+        targets: List[tuple[str, Path, str]] = []
+
+        # Central suite cleanup:
+        # - If --kill-venv is set: delete ~/.mcp-tools entirely (includes .venv)
+        # - If --kill-venv is NOT set: delete everything under ~/.mcp-tools EXCEPT .venv
+        if nexus.exists():
+            venv = nexus / ".venv"
+            if self.kill_venv:
+                targets.append(("dir", nexus, "central suite (~/.mcp-tools) + venv"))
+            else:
+                # Keep the venv (anti-lazy: preserve heavy install if user wants)
+                for child in sorted(nexus.iterdir(), key=lambda p: p.name):
+                    if child.name == ".venv":
+                        continue
+                    targets.append(("dir" if child.is_dir() else "file", child, "central suite component"))
+
+                if venv.exists():
+                    targets.append(("dir", venv, "kept: nexus venv (~/.mcp-tools/.venv)"))
+
+        # Observer state/logs cleanup
+        # If --devlog is enabled, preserve ~/.mcpinv/devlogs so the forensic trail survives the purge.
+        if mcpinv.exists():
+            if self.devlog:
+                for child in sorted(mcpinv.iterdir(), key=lambda p: p.name):
+                    if child.name == "devlogs":
+                        targets.append(("dir", child, "kept: devlogs (~/.mcpinv/devlogs)"))
+                        continue
+                    targets.append(("dir" if child.is_dir() else "file", child, "observer state/logs component"))
+            else:
+                targets.append(("dir", mcpinv, "observer state/logs (~/.mcpinv)"))
+
+        # Deduplicate (if deleting ~/.mcp-tools, venv is implicitly included)
+        deduped: List[tuple[str, Path, str]] = []
+        seen = set()
+        for kind, path, reason in targets:
+            if path in seen:
+                continue
+            seen.add(path)
+            deduped.append((kind, path, reason))
+
+        print("\n🧹 Nexus Uninstall (Central-Only)")
+        print("=" * 60)
+        if deduped:
+            print("Planned removals:")
+            for kind, path, reason in deduped:
+                print(f"- {kind:3} {path}  ({reason})")
+        else:
+            print("Nothing found to remove in approved locations.")
+
+        print("\nSafety note:")
+        print("- This uninstaller will NOT scan your disk or walk up directories.")
+        print("- It will NOT delete anything in your git workspace automatically.")
+        if self.devlog:
+            print(f"- Devlog enabled: keeping {(_home() / '.mcpinv' / 'devlogs')}")
+        print("\nWorkspace cleanup (manual):")
+        print("- If you created local venvs in your repo folders, delete them yourself, e.g.:")
+        print("  - From each repo root: rm -rf .venv __pycache__ .pytest_cache")
+
+        # Confirmation rules:
+        # - --purge-data always requires confirmation
+        # - --kill-venv is explained as the “destroy environments” flag
+        if deduped:
+            print()
+            if not self.kill_venv:
+                print("ℹ️  --kill-venv not set: preserving ~/.mcp-tools/.venv (if present).")
+                print("   If you want a complete wipe (including environments), re-run with --kill-venv.")
+            if not self.yes and not _confirm("Proceed with deleting the above items?"):
+                self.log("User aborted uninstall.")
+                if self.devlog:
+                    _write_devlog(self.devlog, "aborted", {"targets": [str(p) for _, p, _ in deduped]})
+                return 2
+
+        # Remove PATH block if we are purging.
+        _remove_path_block(verbose=self.verbose, devlog=self.devlog)
+
+        # Perform deletions (skip any “kept” markers)
+        for kind, path, reason in deduped:
+            if reason.startswith("kept:"):
+                if self.verbose:
+                    print(f"[-] Keeping: {path}")
+                if self.devlog:
+                    _write_devlog(self.devlog, "kept", {"path": str(path), "reason": reason})
+                continue
+            try:
+                if path.is_dir():
+                    if self.verbose:
+                        print(f"[-] Removing directory: {path}")
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    if self.verbose:
+                        print(f"[-] Removing file: {path}")
+                    path.unlink(missing_ok=True)
+                if self.devlog:
+                    _write_devlog(self.devlog, "removed", {"path": str(path), "reason": reason})
+            except Exception as e:
+                print(f"⚠️  Failed to remove {path}: {e}")
+                if self.devlog:
+                    _write_devlog(self.devlog, "remove_failed", {"path": str(path), "error": str(e), "reason": reason})
+
+        self.log("Uninstall complete (central-only).")
+        return 0
+
     def remove_nexus(self, force: bool = False):
         """Check if we should remove the shared Nexus root (~/.mcp-tools)."""
         nexus = get_mcp_tools_home()
@@ -188,12 +416,33 @@ class SheshaUninstaller:
 def main():
     parser = argparse.ArgumentParser(description="Shesha Clean Room Uninstaller")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the virtual environment as well")
-    parser.add_argument("--purge-data", action="store_true", help="Force remove shared Nexus data (~/.mcp-tools)")
+    parser.add_argument("--purge-data", action="store_true", help="Remove central suite data (~/.mcp-tools) and observer state (~/.mcpinv)")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
+    parser.add_argument("--devlog", action="store_true", help="Write a dev log (JSONL) with 90-day retention")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent.resolve()
-    uninstaller = SheshaUninstaller(root, kill_venv=args.kill_venv, purge_data=args.purge_data)
-    uninstaller.run()
+    devlog_path = None
+    if args.devlog:
+        _prune_old_devlogs(_devlog_dir(), days=90, verbose=args.verbose)
+        devlog_path = _devlog_path()
+        _write_devlog(devlog_path, "start", {"cmd": "uninstall", "kill_venv": args.kill_venv, "purge_data": args.purge_data})
+        if args.verbose:
+            print(f"[-] Devlog: {devlog_path}")
+
+    uninstaller = SheshaUninstaller(
+        root,
+        kill_venv=args.kill_venv,
+        purge_data=args.purge_data,
+        verbose=args.verbose,
+        devlog=devlog_path,
+        yes=args.yes,
+    )
+    rc = uninstaller.run()
+    if devlog_path:
+        _write_devlog(devlog_path, "end", {"rc": rc if rc is not None else 0})
+    raise SystemExit(rc if isinstance(rc, int) else 0)
 
 if __name__ == "__main__":
     main()

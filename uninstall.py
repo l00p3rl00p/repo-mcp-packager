@@ -11,6 +11,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Uninstall MCP Workforce Nexus (repo entrypoint)")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the local .venv (if present)")
     parser.add_argument("--purge-data", action="store_true", help="Purge shared Nexus data (~/.mcp-tools and ~/.mcpinv)")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
     ns, passthrough = parser.parse_known_args()
 
     script = Path(__file__).resolve().parent / "serverinstaller" / "uninstall.py"
@@ -19,10 +22,15 @@ def main() -> int:
         forwarded.append("--kill-venv")
     if ns.purge_data:
         forwarded.append("--purge-data")
+    if ns.verbose:
+        forwarded.append("--verbose")
+    if ns.devlog:
+        forwarded.append("--devlog")
+    if ns.yes:
+        forwarded.append("--yes")
     forwarded.extend(passthrough)
     return subprocess.run([sys.executable, str(script), *forwarded], check=False).returncode
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

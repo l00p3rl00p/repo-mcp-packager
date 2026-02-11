@@ -37,6 +37,8 @@ Thumbs.db
 *.db
 logs/
 log/
+.librarian/
+install.sh
 
 # Dependency Directories
 node_modules/

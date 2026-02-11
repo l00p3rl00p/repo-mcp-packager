@@ -122,22 +122,25 @@ def get_mcp_tools_home():
     return Path.home() / ".mcp-tools"
 
 def get_workspace_root():
-    """Find workspace by looking for sibling repos, searching upwards if needed."""
-    # Start looking from the directory containing this script
-    search_start = Path(__file__).resolve().parent
+    """
+    Find the workspace root without walking up directories.
+    Policy: never scan the disk / walk up directory trees. We only check:
+    - the current working directory (cwd)
+    - the parent of this script's directory (sibling workspace)
+    """
     siblings = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
-    
-    # Check current parent and up to 3 levels higher
-    current = search_start
-    for _ in range(4):
-        parent = current.parent
-        if parent == current: break # Hit root
-        
-        found = [s for s in siblings if (parent / s).is_dir()]
-        if len(found) >= 2:
-            return parent
-        current = parent
-        
+
+    candidates = [
+        Path.cwd(),
+        Path(__file__).resolve().parent.parent,
+    ]
+    for base in candidates:
+        try:
+            found = [s for s in siblings if (base / s).is_dir()]
+            if len(found) >= 2:
+                return base
+        except Exception:
+            continue
     return None
 
 def detect_which_repo():
@@ -278,12 +281,25 @@ def install_to_central(central, workspace=None, update=False):
     
     # Define our components
     repos = ['mcp-injector', 'repo-mcp-packager', 'mcp-server-manager', 'mcp-link-library']
+
+    # Workspace environment conflict warning (no disk scanning; only direct checks)
+    if workspace:
+        env_file = workspace / ".env"
+        if env_file.exists():
+            print("📝 Note: Found a workspace `.env` file.")
+            print("   This can cause unintended conflicts with the central install in ~/.mcp-tools.")
+            print(f"   Path: {env_file}")
     
     for repo in repos:
         source = workspace / repo if (workspace and (workspace / repo).exists()) else None
         target = central / repo
         
         if source:
+            env_file = source / ".env"
+            if env_file.exists():
+                print(f"📝 Note: Found `.env` inside {repo}.")
+                print("   A workspace `.env` can cause unintended conflicts with the central install in ~/.mcp-tools.")
+                print(f"   Path: {env_file}")
             # Mode A: Active Workspace Copy (Developer Mode)
             if target.exists():
                 try:

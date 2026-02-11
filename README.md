@@ -16,6 +16,8 @@ Run a complete wipe (remove local venv + shared suite data) with:
 python3 uninstall.py --kill-venv --purge-data
 ```
 
+Safety: this uninstaller only touches approved central locations (e.g. `~/.mcp-tools`, `~/.mcpinv`, and the Nexus PATH block). It does **not** scan your disk or delete anything in your git workspace.
+
 ## 🧩 IDE Injection During Install
 
 During `--permanent/--industrial` installs, the installer will prompt (TTY only) to auto-detect MCP-capable IDEs and offer to inject the suite tools into them.
