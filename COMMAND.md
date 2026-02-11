@@ -14,6 +14,12 @@ Run from this repo (recommended):
 python3 bootstrap.py --permanent
 ```
 
+Diagnostics (captures subprocess stdout/stderr to `~/.mcpinv/devlogs`, pruned at 90 days):
+
+```bash
+python3 bootstrap.py --permanent --devlog
+```
+
 Update/sync an existing central install:
 
 ```bash
@@ -65,6 +71,12 @@ Full wipe (includes Nexus environments under `~/.mcp-tools/.venv`):
 python3 uninstall.py --purge-data --kill-venv
 ```
 
+Dry run (prints plan, does nothing):
+
+```bash
+python3 uninstall.py --purge-data --kill-venv --dry-run
+```
+
 Diagnostics:
 
 ```bash
@@ -74,4 +86,3 @@ python3 uninstall.py --purge-data --kill-venv --verbose --devlog
 Notes:
 - If you want to preserve environments, omit `--kill-venv`.
 - `--devlog` writes JSONL devlogs under `~/.mcpinv/devlogs` with 90-day retention.
-
