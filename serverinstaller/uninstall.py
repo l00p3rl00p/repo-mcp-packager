@@ -3,6 +3,7 @@ import shutil
 import json
 import argparse
 import sys
+import datetime
 from pathlib import Path
 from typing import List
 
@@ -35,8 +36,18 @@ class SheshaUninstaller:
             print("   Proceeding with directory clean-up mode (fallback).")
             manifest = {}
         else:
-            with open(self.manifest_path, 'r') as f:
-                manifest = json.load(f)
+            try:
+                with open(self.manifest_path, 'r') as f:
+                    manifest = json.load(f)
+            except Exception:
+                stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                backup = self.manifest_path.with_suffix(f".json.corrupt.{stamp}")
+                try:
+                    self.manifest_path.replace(backup)
+                    print(f"⚠️  Recovered malformed manifest. Backup: {backup}")
+                except Exception:
+                    pass
+                manifest = {}
 
         # Remove MCP attachments first (if any)
         if "attached_clients" in manifest:

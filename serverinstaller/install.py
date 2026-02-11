@@ -3,6 +3,7 @@ from dataclasses import asdict
 import sys
 import argparse
 import json
+import datetime
 import subprocess
 import shutil
 from pathlib import Path
@@ -34,9 +35,19 @@ def get_global_ide_paths() -> Dict[str, str]:
     config_path = get_global_config_path()
     try:
         if config_path.exists():
-            data = json.loads(config_path.read_text())
-            return data.get(GLOBAL_CONFIG_KEY, {})
-    except:
+            try:
+                data = json.loads(config_path.read_text())
+            except json.JSONDecodeError:
+                stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                backup = config_path.with_suffix(f".json.corrupt.{stamp}")
+                config_path.replace(backup)
+                print(f"⚠️  Recovered malformed global config: {backup}")
+                return {}
+            if not isinstance(data, dict):
+                return {}
+            ide_paths = data.get(GLOBAL_CONFIG_KEY, {})
+            return ide_paths if isinstance(ide_paths, dict) else {}
+    except Exception:
         pass
     return {}
 
@@ -64,7 +75,13 @@ class SheshaInstaller:
             if executable:
                 self.ensure_executable(p)
         if not self.args.headless:
+            print(f"[*] Registered artifact: {p}")
+
+    def log(self, msg: str):
+        """Print human logs and mirror structured logs for GUI."""
+        if not self.args.headless:
             print(f"[*] {msg}")
+        self.machine_log("log", msg)
 
     def error(self, msg: str, category: str = "runtime"):
         """Log error to console and machine-readable logs, then ROLLBACK."""

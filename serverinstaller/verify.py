@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 from pathlib import Path
 from typing import Dict, Any
 
@@ -13,8 +14,19 @@ class SheshaVerifier:
             print("No installation manifest found. Run install.py first.")
             return
 
-        with open(self.manifest_path, 'r') as f:
-            manifest = json.load(f)
+        try:
+            with open(self.manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except Exception:
+            stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            backup = self.manifest_path.with_suffix(f".json.corrupt.{stamp}")
+            try:
+                self.manifest_path.replace(backup)
+                print(f"Recovered malformed manifest. Backup: {backup}")
+            except Exception:
+                pass
+            print("Manifest was malformed; run install.py again to regenerate it.")
+            return
 
         before = manifest.get("audit_snapshot", {})
         
