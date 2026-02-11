@@ -1,5 +1,7 @@
 import os, sys, shutil, platform, argparse, hashlib, subprocess, json
 from pathlib import Path
+from datetime import datetime, timezone
+from typing import Optional, TypedDict
 
 # Workforce Nexus Global Registry
 GITHUB_ROOT = "https://github.com/l00p3rl00p"
@@ -12,6 +14,73 @@ NEXUS_REPOS = {
 
 # Track artifacts for universal rollback
 INSTALLED_ARTIFACTS = []
+
+STATE_FILENAME = ".nexus_state.json"
+
+class _InstallState(TypedDict, total=False):
+    installed: bool
+    tier: str
+    last_action: str
+    last_updated_utc: str
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+def get_install_state_path(central: Path) -> Path:
+    return central / STATE_FILENAME
+
+def load_install_state(central: Path) -> _InstallState:
+    path = get_install_state_path(central)
+    if not path.exists():
+        return {"installed": False}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {"installed": True}
+        out: _InstallState = {"installed": bool(raw.get("installed", True))}
+        if isinstance(raw.get("tier"), str):
+            out["tier"] = raw["tier"]
+        if isinstance(raw.get("last_action"), str):
+            out["last_action"] = raw["last_action"]
+        if isinstance(raw.get("last_updated_utc"), str):
+            out["last_updated_utc"] = raw["last_updated_utc"]
+        return out
+    except Exception:
+        # Malformed state should never block installs; treat as "installed but unknown".
+        return {"installed": True}
+
+def save_install_state(central: Path, *, installed: bool, tier: Optional[str], last_action: str) -> None:
+    path = get_install_state_path(central)
+    try:
+        payload: _InstallState = {
+            "installed": bool(installed),
+            "last_action": last_action,
+            "last_updated_utc": _utc_now_iso(),
+        }
+        if tier:
+            payload["tier"] = tier
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️  Failed to write install state: {e}")
+
+def detect_existing_install(central: Path) -> bool:
+    """
+    Detect whether the Nexus suite appears to be installed in central (~/.mcp-tools).
+    Keep this lightweight; it should not ever throw.
+    """
+    try:
+        if not central.exists():
+            return False
+        markers = [
+            central / "repo-mcp-packager",
+            central / "mcp-injector",
+            central / "mcp-server-manager",
+            central / "mcp-link-library",
+            central / "bin" / "mcp-activator",
+        ]
+        return any(p.exists() for p in markers)
+    except Exception:
+        return True
 
 def git_available():
     try:
@@ -137,6 +206,22 @@ def ask(question):
         r = input("   [Y/n]: ").strip().lower()
         if r in ['y','yes','']: return True
         if r in ['n','no']: return False
+
+def ask_choice(prompt: str, choices: dict, default: Optional[str] = None) -> str:
+    """
+    Prompt user to choose a key from choices (TTY only). Returns the chosen key.
+    choices: key -> description
+    """
+    print(f"\n{prompt}")
+    for key, desc in choices.items():
+        print(f"  [{key}] {desc}")
+    d = f" (Default: {default})" if default else ""
+    while True:
+        r = input(f"\nChoice{d}: ").strip().lower()
+        if not r and default:
+            return default
+        if r in choices:
+            return r
 
 def pre_flight_checks(central: Path):
     """Universal Safety: Verify integrity and permissions."""
@@ -442,6 +527,124 @@ def ensure_suite_index_prereqs(central: Path) -> None:
     except Exception as e:
         print(f"⚠️  Suite indexing prereqs not created: {e}")
 
+def run_uninstaller(central: Path) -> int:
+    """
+    Best-effort uninstaller. Prefer the packaged uninstall.py if present.
+    Returns process exit code (0 == success).
+    """
+    uninstaller = central / "repo-mcp-packager" / "uninstall.py"
+    if not uninstaller.exists():
+        uninstaller = central / "repo-mcp-packager" / "serverinstaller" / "uninstall.py"
+    if not uninstaller.exists():
+        print("❌ Uninstaller not found in central install.")
+        print(f"   Expected: {central}/repo-mcp-packager/uninstall.py")
+        return 2
+    try:
+        cmd = [sys.executable, str(uninstaller), "--kill-venv", "--purge-data"]
+        return subprocess.call(cmd)
+    except Exception as e:
+        print(f"❌ Failed to run uninstaller: {e}")
+        return 2
+
+def run_injector_config_flow(workspace: Optional[Path], central: Path, tier: Optional[str]) -> int:
+    """
+    Best-effort "anti-lazy" injector setup:
+    - Prefer --startup-detect (guided, auto-detects IDEs)
+    - Otherwise list clients and allow one-shot --add
+    """
+    try:
+        if tier == "industrial":
+            injector = central / "mcp-injector" / "mcp_injector.py"
+        elif workspace:
+            injector = workspace / "mcp-injector" / "mcp_injector.py"
+        else:
+            injector = central / "mcp-injector" / "mcp_injector.py"
+
+        if not injector.exists():
+            print("❌ Injector not found; cannot configure clients.")
+            return 2
+
+        # Guided flow (recommended)
+        try:
+            return subprocess.call([sys.executable, str(injector), "--startup-detect"])
+        except Exception:
+            pass
+
+        # Fallback flow
+        print("\n🧩 Injector Quickstart")
+        print("-" * 60)
+        subprocess.call([sys.executable, str(injector), "--list-clients"])
+        client = input("\nType the client name to add (e.g., claude): ").strip()
+        if not client:
+            print("⚠️  No client selected; skipping injector config.")
+            return 0
+        return subprocess.call([sys.executable, str(injector), "--client", client, "--add"])
+    except Exception as e:
+        print(f"❌ Injector config flow failed: {e}")
+        return 2
+
+def launch_gui(central: Path) -> int:
+    observer_bin = central / "bin" / "mcp-observer"
+    try:
+        if observer_bin.exists():
+            return subprocess.call([str(observer_bin), "gui"])
+
+        venv_python = central / ".venv" / "bin" / "python"
+        if platform.system() == "Windows":
+            venv_python = central / ".venv" / "Scripts" / "python.exe"
+        if not venv_python.exists():
+            venv_python = sys.executable
+
+        env = os.environ.copy()
+        env["PYTHONPATH"] = f"{central}/mcp-server-manager:{env.get('PYTHONPATH', '')}"
+        return subprocess.call([str(venv_python), "-m", "mcp_inventory.cli", "gui"], env=env)
+    except Exception as e:
+        print(f"⚠️  Failed to launch GUI: {e}")
+        print("   Try running it manually: mcp-observer gui")
+        return 2
+
+def rerun_action_menu(*, workspace: Optional[Path], central: Path, last_tier: Optional[str]) -> str:
+    """
+    Interactive menu shown on re-runs so users can easily find uninstall/config/gui
+    without hunting docs.
+    """
+    if not sys.stdin.isatty():
+        return "continue"
+
+    print("\n♻️  Nexus Installer Re-run Detected")
+    print("=" * 60)
+    print(f"Central install: {central}")
+    if last_tier:
+        print(f"Last tier:      {last_tier}")
+    print("-" * 60)
+    print("Pick what you want to do now (anti-lazy mode).")
+
+    choice = ask_choice(
+        "Actions:",
+        {
+            "1": "Install / Repair (recommended)",
+            "2": "Configure IDE injection (create/update global config)",
+            "3": "Launch GUI (Observer dashboard)",
+            "4": "Uninstall (wipe: venv + data)",
+            "5": "Exit",
+        },
+        default="1",
+    )
+
+    if choice == "2":
+        run_injector_config_flow(workspace, central, last_tier)
+        return "exit"
+    if choice == "3":
+        launch_gui(central)
+        return "exit"
+    if choice == "4":
+        rc = run_uninstaller(central)
+        save_install_state(central, installed=(rc != 0), tier=last_tier, last_action="uninstall")
+        return "exit"
+    if choice == "5":
+        return "exit"
+    return "continue"
+
 
 def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> None:
     """
@@ -571,6 +774,14 @@ def main():
         return
     
     central = get_mcp_tools_home()
+
+    # Intelligent re-run behavior: when already installed, offer actions first.
+    existing = detect_existing_install(central)
+    state = load_install_state(central)
+    if existing and not args.force and not args.sync:
+        action = rerun_action_menu(workspace=workspace, central=central, last_tier=state.get("tier"))
+        if action == "exit":
+            return
     
     # 0. Universal Pre-flight
     if not pre_flight_checks(central):
@@ -584,6 +795,15 @@ def main():
                 setup_nexus_venv(central)
                 create_hardened_entry_points(central)
                 ensure_global_path(central)
+
+            # Always make indexing/injection prerequisites available post-install.
+            if tier != "lite":
+                ensure_suite_index_prereqs(central)
+                prompt_for_client_injection(
+                    workspace=workspace or get_workspace_root() or (central / "suite"),
+                    central=central,
+                    tier=tier,
+                )
             
             if tier != 'lite':
                 generate_integrity_manifest(central)
@@ -591,6 +811,7 @@ def main():
             print(f"\n✅ Complete! Tools available at {central} [Tier: {tier.upper()}]")
             if tier == 'industrial':
                 print("💡 Try running 'mcp-surgeon --help' in a new terminal.")
+            save_install_state(central, installed=True, tier=tier, last_action="install_full")
         elif strategy == 'step':
             if ask("Install to central location?"): 
                 install_to_central(central, workspace, update=args.force)
@@ -602,13 +823,25 @@ def main():
                         create_hardened_entry_points(central)
                     if ask("Integrate Nexus into your global PATH?"):
                         ensure_global_path(central)
+
+                if tier != "lite":
+                    if ask("Create suite prereqs (inventory + injector config)?"):
+                        ensure_suite_index_prereqs(central)
+                    if ask("Detect IDE clients and offer injection now?"):
+                        prompt_for_client_injection(
+                            workspace=workspace or get_workspace_root() or (central / "suite"),
+                            central=central,
+                            tier=tier,
+                        )
                 
                 if tier != 'lite':
                     if ask("Generate Integrity Manifest?"):
                         generate_integrity_manifest(central)
+            save_install_state(central, installed=True, tier=tier, last_action="install_step")
     except Exception as e:
         print(f"\n❌ Installation failed: {e}")
         rollback()
+        save_install_state(central, installed=False, tier=tier, last_action="install_failed")
         sys.exit(1)
 
     # Post-Install GUI Launch

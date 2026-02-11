@@ -20,6 +20,16 @@ python3 uninstall.py --kill-venv --purge-data
 
 During `--permanent/--industrial` installs, the installer will prompt (TTY only) to auto-detect MCP-capable IDEs and offer to inject the suite tools into them.
 
+## ♻️ Intelligent Re-runs (Anti-Lazy Mode)
+
+If you run `python3 bootstrap.py` again and an existing install is detected in `~/.mcp-tools`, the installer will offer an action menu so you don’t have to hunt commands:
+
+- Install / Repair
+- Configure IDE injection (creates/updates the global injector config)
+- Launch GUI
+- Uninstall (full wipe)
+- Exit
+
 ## ⚡ Quick Start: Standalone Activator
 
 Install a single repository as a portable MCP server immediately:
