@@ -123,6 +123,34 @@ def _remove_path_block(verbose: bool = False, devlog: Optional[Path] = None) -> 
         except Exception:
             continue
 
+def _remove_user_wrappers(verbose: bool = False, devlog: Optional[Path] = None) -> None:
+    """
+    Remove short-command wrapper scripts created by repo-mcp-packager bootstrap.
+    This is scoped to a single, common user-owned bin directory; no disk scans.
+    """
+    if sys.platform == "win32":
+        return
+
+    wrappers_dir = _home() / ".local" / "bin"
+    marker = "# Workforce Nexus User Wrapper (managed by repo-mcp-packager)"
+    names = ("mcp-surgeon", "mcp-observer", "mcp-librarian", "mcp-activator")
+
+    for name in names:
+        p = wrappers_dir / name
+        try:
+            if not p.exists() or not p.is_file():
+                continue
+            content = p.read_text(encoding="utf-8", errors="ignore")
+            if marker not in content:
+                continue
+            p.unlink(missing_ok=True)
+            if verbose:
+                print(f"[-] Removed user wrapper: {p}")
+            if devlog:
+                _write_devlog(devlog, "user_wrapper_removed", {"path": str(p)})
+        except Exception:
+            continue
+
 
 class SheshaUninstaller:
     def __init__(
@@ -336,6 +364,7 @@ class SheshaUninstaller:
 
         # Remove PATH block if we are purging.
         _remove_path_block(verbose=self.verbose, devlog=self.devlog)
+        _remove_user_wrappers(verbose=self.verbose, devlog=self.devlog)
 
         # Perform deletions (skip any “kept” markers)
         for kind, path, reason in deduped:

@@ -172,6 +172,16 @@ class GuiHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(GUI_DIR), **kwargs)
 
+    def log_message(self, format, *args):
+        """
+        Silence default HTTP access logs (which can spam stdout and bloat daemon logs).
+
+        Opt-in: set `NEXUS_GUI_ACCESS_LOG=1` to restore default logging.
+        """
+        if os.environ.get("NEXUS_GUI_ACCESS_LOG") == "1":
+            return super().log_message(format, *args)
+        return
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/widgets":

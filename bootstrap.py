@@ -197,6 +197,65 @@ def _nexus_python(central: Path) -> Path:
         return venv_python
     return _preferred_system_python3() or Path(sys.executable)
 
+def _default_user_wrappers_dir() -> Optional[Path]:
+    if platform.system() == "Windows":
+        return None
+    return Path.home() / ".local" / "bin"
+
+def install_user_wrappers(
+    *,
+    central: Path,
+    wrappers_dir: Path,
+    overwrite: bool = False,
+    verbose: bool = False,
+) -> None:
+    """
+    Install short-command wrappers into a common user bin directory (default: ~/.local/bin).
+
+    This avoids editing shell RC files by default while still giving users short, global-ish commands.
+    """
+    marker = "# Workforce Nexus User Wrapper (managed by repo-mcp-packager)"
+    wrappers_dir.mkdir(parents=True, exist_ok=True)
+
+    commands = {
+        "mcp-surgeon": central / "bin" / "mcp-surgeon",
+        "mcp-observer": central / "bin" / "mcp-observer",
+        "mcp-librarian": central / "bin" / "mcp-librarian",
+        "mcp-activator": central / "bin" / "mcp-activator",
+    }
+
+    for name, target in commands.items():
+        if not target.exists():
+            continue
+
+        dest = wrappers_dir / name
+        if dest.exists() and not overwrite:
+            # Only skip if it's not ours. If it's ours, we can refresh it.
+            try:
+                if dest.is_file() and marker in dest.read_text(encoding="utf-8", errors="ignore"):
+                    pass
+                else:
+                    if verbose:
+                        print(f"ℹ️  Wrapper exists; skipping: {dest}")
+                    continue
+            except Exception:
+                if verbose:
+                    print(f"ℹ️  Wrapper exists; skipping: {dest}")
+                continue
+
+        script = f"""#!/usr/bin/env bash
+set -euo pipefail
+{marker}
+exec "{target}" "$@"
+"""
+        try:
+            dest.write_text(script, encoding="utf-8")
+            dest.chmod(dest.stat().st_mode | 0o111)
+            if verbose:
+                print(f"✅ Installed user wrapper: {dest}")
+        except Exception as e:
+            print(f"⚠️  Failed to install wrapper {dest}: {e}")
+
 def _is_central_install_dir(path: Path) -> bool:
     try:
         central = get_mcp_tools_home().resolve()
@@ -463,7 +522,16 @@ def install_to_central(central, workspace=None, update=False):
                 except Exception as e:
                     print(f"⚠️  Failed to expose uninstall.py: {e}")
 
-def install_converged_application(tier, workspace, update: bool = False, add_to_path: bool = False):
+def install_converged_application(
+    tier,
+    workspace,
+    update: bool = False,
+    add_to_path: bool = False,
+    user_wrappers: bool = True,
+    wrappers_dir: Optional[Path] = None,
+    overwrite_wrappers: bool = False,
+    verbose: bool = False,
+):
     """Phase 12: Application Convergence Logic."""
     central = get_mcp_tools_home()
     central.mkdir(parents=True, exist_ok=True)
@@ -502,6 +570,13 @@ def install_converged_application(tier, workspace, update: bool = False, add_to_
         create_hardened_entry_points(central)
         if add_to_path:
             ensure_global_path(central)
+        if user_wrappers and (wrappers_dir or _default_user_wrappers_dir()):
+            install_user_wrappers(
+                central=central,
+                wrappers_dir=wrappers_dir or _default_user_wrappers_dir(),  # type: ignore[arg-type]
+                overwrite=overwrite_wrappers,
+                verbose=verbose,
+            )
         ensure_suite_index_prereqs(central)
         prompt_for_client_injection(workspace=workspace, central=central, tier=tier)
         # Trigger Librarian Synergy (Lazy sync)
@@ -533,6 +608,11 @@ def install_converged_application(tier, workspace, update: bool = False, add_to_
         print("ℹ️  Shell PATH was NOT modified (default).")
         print(f"   Run directly: {central}/bin/mcp-activator (etc.)")
         print("   Or re-run with --add-to-path to add ~/.mcp-tools/bin to your shell PATH.")
+    if user_wrappers and (wrappers_dir or _default_user_wrappers_dir()):
+        print("-" * 60)
+        print(f"✅ User wrappers installed to: {wrappers_dir or _default_user_wrappers_dir()}")
+        print("   If that directory is not on your PATH, add it manually (recommended):")
+        print('     export PATH="$HOME/.local/bin:$PATH"')
     print("="*60 + "\n")
 
 def setup_nexus_venv(central: Path):
@@ -842,9 +922,9 @@ def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> No
     try:
         if not sys.stdin.isatty():
             return
-        print("\n🧩 IDE Injection (Recommended)")
-        if not ask("Detect MCP-capable IDEs and offer to inject now?"):
-            return
+        print("\nIDE injection (optional)")
+        print("- This step is opt-in (no automatic injection).")
+        print("- You can safely skip by answering 'N' in the next prompt.")
 
         if tier == "industrial":
             injector = central / "mcp-injector" / "mcp_injector.py"
@@ -852,7 +932,7 @@ def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> No
             injector = workspace / "mcp-injector" / "mcp_injector.py"
 
         if not injector.exists():
-            print("⚠️  Injector not found; skipping IDE injection prompt.")
+            print("Warning: injector not found; skipping IDE injection prompt.")
             return
 
         if DEVLOG:
@@ -860,7 +940,7 @@ def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> No
         else:
             subprocess.run([sys.executable, str(injector), "--startup-detect"], check=False)
     except Exception as e:
-        print(f"⚠️  IDE injection prompt skipped: {e}")
+        print(f"Warning: IDE injection prompt skipped: {e}")
         log_event(DEVLOG, "ide_injection_prompt_failed", {"error": str(e)})
 
 def generate_integrity_manifest(central: Path):
@@ -886,7 +966,21 @@ def generate_integrity_manifest(central: Path):
     print(f"✅ Integrity locked at {manifest_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Nexus Bootstrap - Tiered Reliability")
+    parser = argparse.ArgumentParser(
+        description="Nexus Bootstrap - Tiered Reliability",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Commands (what they do):\n"
+            "  mcp-activator --sync             Update the central install (workspace or GitHub)\n"
+            "  mcp-activator --permanent        Install/repair the full suite into ~/.mcp-tools\n"
+            "  mcp-activator --gui              Launch GUI after install/sync\n"
+            "\n"
+            "Common flows:\n"
+            "  Install:   python3 bootstrap.py --permanent\n"
+            "  Update:    python3 bootstrap.py --sync\n"
+            "  GUI:       python3 bootstrap.py --permanent --gui\n"
+        ),
+    )
     parser.add_argument("--lite", action="store_true", help="Lite mode (Zero-Dep)")
     parser.add_argument("--industrial", "--permanent", action="store_true", dest="industrial", help="Industrial mode (Infrastructure)")
     parser.add_argument("--sync", "--update", action="store_true", dest="sync", help="Sync/Update Workforce Nexus from workspace or GitHub")
@@ -894,6 +988,9 @@ def main():
     parser.add_argument("--strategy", choices=["full", "step"], help="Installation strategy")
     parser.add_argument("--gui", action="store_true", help="Launch GUI after installation")
     parser.add_argument("--add-to-path", action="store_true", help="Opt-in: add ~/.mcp-tools/bin to shell PATH (edits ~/.zshrc or ~/.bashrc)")
+    parser.add_argument("--no-user-wrappers", action="store_true", help="Do not install short-command wrappers into a user bin dir (default: ~/.local/bin)")
+    parser.add_argument("--wrappers-dir", type=str, help="Directory to install user wrappers into (default: ~/.local/bin)")
+    parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
     parser.add_argument("--verbose", action="store_true", help="Verbose output + devlog-friendly prints")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
@@ -926,11 +1023,29 @@ def main():
 
         if not workspace:
             print("🔄 No workspace found. Syncing Industrial Nexus via GitHub...")
-            install_converged_application('industrial', None, update=True, add_to_path=False)
+            install_converged_application(
+                'industrial',
+                None,
+                update=True,
+                add_to_path=False,
+                user_wrappers=not args.no_user_wrappers,
+                wrappers_dir=Path(args.wrappers_dir).expanduser() if args.wrappers_dir else None,
+                overwrite_wrappers=args.overwrite_wrappers,
+                verbose=args.verbose,
+            )
             log_event(DEVLOG, "bootstrap_end", {"rc": 0})
             return
         print(f"🔄 Syncing Industrial Nexus from local workspace: {workspace}")
-        install_converged_application('industrial', workspace, update=True, add_to_path=False)
+        install_converged_application(
+            'industrial',
+            workspace,
+            update=True,
+            add_to_path=False,
+            user_wrappers=not args.no_user_wrappers,
+            wrappers_dir=Path(args.wrappers_dir).expanduser() if args.wrappers_dir else None,
+            overwrite_wrappers=args.overwrite_wrappers,
+            verbose=args.verbose,
+        )
         log_event(DEVLOG, "bootstrap_end", {"rc": 0})
         return
 
@@ -973,7 +1088,15 @@ def main():
         if not args.lite and not args.industrial:
             # If no manual flags, prompt for convergence
             tier = ask_convergence_tier()
-            install_converged_application(tier, workspace, add_to_path=args.add_to_path)
+            install_converged_application(
+                tier,
+                workspace,
+                add_to_path=args.add_to_path,
+                user_wrappers=not args.no_user_wrappers,
+                wrappers_dir=Path(args.wrappers_dir).expanduser() if args.wrappers_dir else None,
+                overwrite_wrappers=args.overwrite_wrappers,
+                verbose=args.verbose,
+            )
             return
     else:
         # Partial or Autonomous Mode
@@ -995,6 +1118,7 @@ def main():
         return
     
     central = get_mcp_tools_home()
+    wrappers_dir = Path(args.wrappers_dir).expanduser() if args.wrappers_dir else None
 
     # Intelligent re-run behavior: when already installed, offer actions first.
     existing = detect_existing_install(central)
@@ -1019,6 +1143,13 @@ def main():
                     ensure_global_path(central)
                 else:
                     print("ℹ️  Skipping shell PATH modification (use --add-to-path to opt in).")
+                if not args.no_user_wrappers and (wrappers_dir or _default_user_wrappers_dir()):
+                    install_user_wrappers(
+                        central=central,
+                        wrappers_dir=wrappers_dir or _default_user_wrappers_dir(),  # type: ignore[arg-type]
+                        overwrite=args.overwrite_wrappers,
+                        verbose=args.verbose,
+                    )
 
             # Always make indexing/injection prerequisites available post-install.
             if tier != "lite":
@@ -1045,6 +1176,13 @@ def main():
                         setup_nexus_venv(central)
                     if ask("Create hardened global entry points?"):
                         create_hardened_entry_points(central)
+                    if not args.no_user_wrappers and (wrappers_dir or _default_user_wrappers_dir()) and ask("Install user wrappers to ~/.local/bin?"):
+                        install_user_wrappers(
+                            central=central,
+                            wrappers_dir=wrappers_dir or _default_user_wrappers_dir(),  # type: ignore[arg-type]
+                            overwrite=args.overwrite_wrappers,
+                            verbose=args.verbose,
+                        )
                     if ask("Integrate Nexus into your global PATH?"):
                         ensure_global_path(central)
 

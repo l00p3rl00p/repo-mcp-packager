@@ -44,7 +44,7 @@ The `audit.py` module performs a multi-stage probe to build a system capabilitie
 ### Stage 1: Shell Detection
 The probe identifies the active shell via the `SHELL` environment variable.
 * **Targets**: `.zshrc` (macOS default), `.bashrc`, `.bash_profile`.
-* **Action**: Determines which RC file should receive (or remove) the Nexus PATH block.
+* **Action**: Determines which RC file would receive (or remove) the Nexus PATH block **only when opt-in flags are used**.
 
 ### Stage 2: Binary Path Discovery
 Uses `shutil.which` to find system binaries for:
@@ -79,15 +79,27 @@ Behavior:
 * `bootstrap.py --devlog` captures stdout/stderr from key subprocesses (git/pip/indexing/injection prompts).
 
 ### PATH Management (Surgical Injection)
-The installer adds the suite bin directory to the host PATH using unique markers to ensure safe uninstallation.
+The bootstrap can optionally add the suite bin directory to the host PATH using unique markers to ensure safe uninstallation.
 
 **Example Injection Block:**
 ```bash
-# Shesha Block START
+# Workforce Nexus Block START
 export PATH="$HOME/.mcp-tools/bin:$PATH"
-# Shesha Block END
+# Workforce Nexus Block END
 ```
 *The uninstall script specifically targets everything between these markers.*
+
+### User Wrappers (Default Short Commands)
+By default, Industrial installs also place **short-command wrapper scripts** in a common user-owned directory:
+* `~/.local/bin`
+
+These wrappers do **not** require editing `~/.zshrc` and allow running commands from any directory:
+* `mcp-activator`, `mcp-surgeon`, `mcp-observer`, `mcp-librarian`
+
+If `~/.local/bin` is not on your PATH, add it manually (recommended):
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ### Installer Re-runs (First run vs re-run)
 `bootstrap.py` persists a small state file under:
@@ -113,6 +125,9 @@ Canonical uninstall lives in this repo and supports:
 * `--devlog` to capture actions to the shared devlog
 * `--kill-venv` to remove the shared venv (kept by default)
 * `--purge-data` to remove shared suite data under `~/.mcp-tools` / `~/.mcpinv`
+
+When purging, uninstall also removes Nexus-managed wrapper scripts from:
+* `~/.local/bin` (only wrapper files containing the Nexus marker)
 
 ### Optional Extra Repos
 If you want the activator to install/update additional git repos alongside the Nexus suite, you can add an `extra_repos` map to `~/.mcp-tools/config.json`:
