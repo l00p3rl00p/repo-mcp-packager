@@ -5,7 +5,15 @@ from typing import Optional, TypedDict
 
 from nexus_devlog import prune_devlogs, devlog_path, log_event, run_capture
 
+# AGENT O: Integration
+try:
+    from nexus_session_logger import NexusSessionLogger
+    SessionLogger = NexusSessionLogger()
+except ImportError:
+    SessionLogger = None
+
 DEVLOG: Optional[Path] = None
+FORCE_HEADLESS: bool = False
 
 # Workforce Nexus Global Registry
 GITHUB_ROOT = "https://github.com/l00p3rl00p"
@@ -382,6 +390,9 @@ def ask_user_install_strategy():
 
 
 def ask(question):
+    if FORCE_HEADLESS:
+        print(f"[*] (Headless) Automatically accepted: {question}")
+        return True
     print(f"\n❓ {question}")
     while True:
         r = input("   [Y/n]: ").strip().lower()
@@ -920,7 +931,7 @@ def prompt_for_client_injection(workspace: Path, central: Path, tier: str) -> No
     Uses mcp-injector's startup-detect flow to keep logic centralized.
     """
     try:
-        if not sys.stdin.isatty():
+        if FORCE_HEADLESS or not sys.stdin.isatty():
             return
         print("\nIDE injection (optional)")
         print("- This step is opt-in (no automatic injection).")
@@ -992,9 +1003,15 @@ def main():
     parser.add_argument("--wrappers-dir", type=str, help="Directory to install user wrappers into (default: ~/.local/bin)")
     parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
+    parser.add_argument("--repair", action="store_true", help="Repair venv and entry points without full re-install")
+    parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output + devlog-friendly prints")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     args = parser.parse_args()
+    
+    if args.headless:
+        global FORCE_HEADLESS
+        FORCE_HEADLESS = True
 
     if args.devlog:
         prune_devlogs(days=90)
@@ -1003,6 +1020,9 @@ def main():
         log_event(DEVLOG, "bootstrap_start", {"argv": sys.argv})
         if args.verbose:
             print(f"[-] Devlog: {DEVLOG}")
+            
+    if SessionLogger:
+        SessionLogger.log("INFO", "Nexus Bootstrap Initiated", suggestion="Checking workspace integrity...")
 
     if args.sync:
         workspace = None
@@ -1046,6 +1066,43 @@ def main():
             overwrite_wrappers=args.overwrite_wrappers,
             verbose=args.verbose,
         )
+        log_event(DEVLOG, "bootstrap_end", {"rc": 0})
+        return
+
+    if args.repair:
+        central = get_mcp_tools_home()
+        print(f"🔧 Repairing Industrial Nexus Infrastructure at {central}...")
+        
+        # 0. Pre-flight
+        if not pre_flight_checks(central):
+            sys.exit(1)
+            
+        try:
+            # Refresh venv
+            setup_nexus_venv(central)
+            
+            # Refresh entry points
+            create_hardened_entry_points(central)
+            
+            # Refresh user wrappers
+            wrappers_dir = Path(args.wrappers_dir).expanduser() if args.wrappers_dir else _default_user_wrappers_dir()
+            if wrappers_dir:
+                install_user_wrappers(
+                    central=central,
+                    wrappers_dir=wrappers_dir,
+                    overwrite=True,
+                    verbose=args.verbose
+                )
+            
+            # Refresh suite prereqs
+            ensure_suite_index_prereqs(central)
+            
+            print("\n✅ Repair Completed. All entry points and venv refreshed.")
+            save_install_state(central, installed=True, tier="industrial", last_action="repair")
+        except Exception as e:
+            print(f"❌ Repair failed: {e}")
+            sys.exit(1)
+            
         log_event(DEVLOG, "bootstrap_end", {"rc": 0})
         return
 

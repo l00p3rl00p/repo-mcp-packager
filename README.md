@@ -6,6 +6,15 @@ Last updated: 2026-02-11
 
 The **Activator** orchestrates the Workforce Nexus, transforming raw GitHub repositories into production-ready AI tools. It handles environment isolation, structural auditing, and atomic deployments.
 
+## 🚀 Quick Start (Recommended)
+
+To deploy and launch the **entire Workforce Nexus suite** (all 4 modules) in one go:
+```bash
+python3 bootstrap.py --permanent --gui
+```
+
+> **Universal Workspace**: For the high-level overview of the full ecosystem, see the [Master README](../README.md).
+
 ---
 
 ## 🧹 One-Command Full Wipe (Start Fresh)
