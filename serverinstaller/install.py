@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-__version__ = "3.1.0"
+__version__ = "3.3.0"
 
 # Ensure we can import from the same directory
 sys.path.append(str(Path(__file__).parent))
