@@ -1,6 +1,13 @@
 # Changelog - Nexus Activator (repo-mcp-packager)
 
-## [3.2.0] - 2026-02-19
+## [3.2.1] - 2026-02-19
+
+### Improvements
+- **True Start**: Component-aware interactive onboarding now included in `./setup.sh`.
+- **Suite Sync**: Version alignment with Nexus v3.2.1.
+
+### Fixed
+- **`install.py`**: Fixed syntax error (escaped quotes) in `GLOBAL_CONFIG_KEY`.
 
 ### Security
 - `gui_bridge.py` CORS restricted to `localhost` origins only — wildcard removed.
@@ -31,4 +38,4 @@
 - Industrial path management (`~/.mcp-tools`).
 
 ---
-*Status: Production Ready (v2.0.0)*
+*Status: Production Ready (v3.2.1)*

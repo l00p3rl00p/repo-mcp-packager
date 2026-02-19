@@ -32,7 +32,7 @@ try:
 except ImportError:
     FORGE_AVAILABLE = False
 
-GLOBAL_CONFIG_KEY = \"ide_config_paths\"
+GLOBAL_CONFIG_KEY = "ide_config_paths"
 
 
 def get_global_config_path():
