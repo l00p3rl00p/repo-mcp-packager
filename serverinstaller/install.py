@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-__version__ = "0.1.0"
+__version__ = "3.1.0"
 
 # Ensure we can import from the same directory
 sys.path.append(str(Path(__file__).parent))
@@ -24,7 +24,16 @@ try:
 except ImportError:
     MCP_AVAILABLE = False
 
-GLOBAL_CONFIG_KEY = "ide_config_paths"
+# Forge imports (Phase 12 Synergy)
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent / "forge"))
+    from forge_engine import ForgeEngine
+    FORGE_AVAILABLE = True
+except ImportError:
+    FORGE_AVAILABLE = False
+
+GLOBAL_CONFIG_KEY = \"ide_config_paths\"
+
 
 def get_global_config_path():
     if sys.platform == "win32":
@@ -90,9 +99,14 @@ class SheshaInstaller:
         self.args = args
         self.portable_root = Path(__file__).parent.resolve()
         self.project_root = self.portable_root.parent.resolve()
-        self.auditor = EnvironmentAuditor(self.project_root)
+        
+        # Determine suite root for Forge synergy
+        self.suite_root = self.project_root.parent # /repo-mcp-packager -> /mcp-creater-manager
+        
+        # Initialize components
+        self.auditor = Auditor(self.project_root)
         self.artifacts = []
-
+        self.mcp_attachments = []
     def ensure_executable(self, path: Path):
         """Universal Safety: Ensure scripts are executable."""
         if not path.exists() or not path.is_file(): return
@@ -753,6 +767,19 @@ requires-python = ">=3.6"
             self.update()
             return
 
+        # Phase 12: Forge Loop
+        if FORGE_AVAILABLE and (self.args.forge or self.args.forge_repo):
+            engine = ForgeEngine(self.suite_root)
+            source = self.args.forge_repo if self.args.forge_repo else self.args.forge
+            self.log(f"🚀 FORGING: {source}")
+            target = engine.forge(source, self.args.name)
+            self.log(f"✅ FORGE COMPLETE: {target}")
+            # After forge, we might want to continue installation in the new target
+            self.project_root = target
+            # Re-initialize auditor for the new target
+            from audit import Auditor
+            self.auditor = Auditor(self.project_root)
+
         if not self.args.headless and not sys.stdin.isatty():
             self.error("Interactive mode requires a TTY. Use --headless for automated install.")
 
@@ -923,8 +950,14 @@ def main():
     parser.add_argument("--attach-to", nargs="+", 
                        choices=["all", "claude", "xcode", "cursor", "codex", "aistudio", "vscode"],
                        help="Attach MCP server to IDE(s)")
+
+    # Forge arguments (The Factory Release)
+    parser.add_argument("--forge", type=str, help="Forge a local directory into an MCP server")
+    parser.add_argument("--forge-repo", type=str, help="Forge a remote repository into an MCP server")
+    parser.add_argument("--name", type=str, help="Optional name for the forged server")
     
     args = parser.parse_args()
+
     
     # Manual helper for asdict if needed
     from audit import AuditResult
