@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import subprocess
+import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 import yaml
@@ -186,7 +187,7 @@ if __name__ == "__main__":
             "status": "ready",
             "source": source,
             "tags": ["forged", "packager-v3"],
-            "added_on": os.popen("date -u +%Y-%m-%dT%H:%M:%SZ").read().strip()
+            "added_on": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
         inventory["servers"].append(new_entry)
 
