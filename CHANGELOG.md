@@ -1,5 +1,14 @@
 # Changelog - Nexus Activator (repo-mcp-packager)
 
+## [3.2.0] - 2026-02-19
+
+### Security
+- `gui_bridge.py` CORS restricted to `localhost` origins only — wildcard removed.
+- 4× bare `except:` blocks replaced with typed handlers (`json.JSONDecodeError`, `sqlite3.OperationalError`, `OSError`).
+- `forge_engine.py`: `os.popen("date")` → `datetime.utcnow()` (eliminates shell subprocess for timestamps).
+
+---
+
 ## [2.0.0] - 2026-02-18
 
 ### 🚀 Adaptive Lifecycle

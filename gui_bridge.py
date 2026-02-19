@@ -7,7 +7,8 @@ from flask_cors import CORS
 from pathlib import Path
 
 app = Flask(__name__)
-CORS(app) # Allow Vite dev server to access
+# Restrict to local dev origins only — wildcard CORS is a release blocker
+CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174"])
 
 LOG_PATH = Path.home() / ".mcpinv" / "session.jsonl"
 
@@ -20,7 +21,7 @@ def get_logs():
     """Read the last 100 lines of the session log."""
     if not LOG_PATH.exists():
         return jsonify([])
-    
+
     logs = []
     try:
         with open(LOG_PATH, "r", encoding="utf-8") as f:
@@ -29,7 +30,8 @@ def get_logs():
             for line in lines:
                 try:
                     logs.append(json.loads(line))
-                except:
+                except json.JSONDecodeError:
+                    # Skip malformed JSONL entries without aborting the full response
                     continue
         return jsonify(logs)
     except Exception as e:
@@ -40,7 +42,7 @@ def get_status():
     """Real status from Nexus inventory."""
     inventory_path = Path.home() / ".mcpinv" / "inventory.json"
     servers = []
-    
+
     if inventory_path.exists():
         try:
             with open(inventory_path, "r") as f:
@@ -54,21 +56,23 @@ def get_status():
                         "status": "online" if "runtime" in s_data else "stopped",
                         "type": s_data.get("type", "generic")
                     })
-        except:
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            # Inventory unreadable — return empty list; service still usable
             pass
 
     def is_running(pattern):
         try:
-            # Simple pgrep check
+            # pgrep returns 0 if at least one process matches
             result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
             return result.returncode == 0
-        except:
+        except (FileNotFoundError, OSError):
+            # pgrep unavailable on this platform
             return False
 
     # Check for core components
     # activator/observer/surgeon are CLI tools, so we define 'online' as 'installed'
     bin_dir = Path.home() / ".mcp-tools" / "bin"
-    
+
     # Posture: check if watcher has been active in last 60 seconds
     db_path = Path.home() / ".mcp-tools" / "mcp-server-manager" / "knowledge.db"
     has_watcher = False
@@ -81,7 +85,8 @@ def get_status():
             if count > 0:
                 has_watcher = True
             conn.close()
-        except:
+        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            # DB schema mismatch or corruption — safe to ignore for status check
             pass
 
     return jsonify({
@@ -99,7 +104,7 @@ def get_artifacts():
     artifact_dir = Path.home() / ".mcpinv" / "artifacts"
     if not artifact_dir.exists():
         return jsonify([])
-    
+
     results = []
     for f in sorted(artifact_dir.glob("*"), key=os.path.getmtime, reverse=True)[:50]:
         results.append({
@@ -114,23 +119,23 @@ def get_artifacts():
 def control_server():
     """Start or Stop an MCP server."""
     from flask import request
-    data = request.json
+    data = request.json or {}
     s_id = data.get("id")
-    action = data.get("action") # "start" or "stop"
+    action = data.get("action")  # "start" or "stop"
     runtime_path = Path.home() / ".mcpinv" / "runtime.json"
-    
+
     inventory_path = Path.home() / ".mcpinv" / "inventory.json"
     if not inventory_path.exists():
         return jsonify({"error": "No inventory found"}), 404
-    
+
     try:
         with open(inventory_path, "r") as f:
             inventory = json.load(f)
-        
+
         server = inventory.get("servers", {}).get(s_id)
         if not server:
             return jsonify({"error": "Server not found"}), 404
-        
+
         # Load running pids
         pids = {}
         if runtime_path.exists():
@@ -141,16 +146,17 @@ def control_server():
             cmd = server.get("command")
             if not cmd:
                 return jsonify({"error": "No start command defined for this server"}), 400
-            
-            import subprocess
+
+            # shell=True used here intentionally with inventory-sourced commands only
+            # (inventory is operator-written, not user-supplied via the API)
             proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pids[s_id] = proc.pid
-            
+
             with open(runtime_path, "w") as f:
                 json.dump(pids, f)
-                
+
             return jsonify({"status": "starting", "pid": proc.pid})
-            
+
         elif action == "stop":
             pid = pids.get(s_id)
             if pid:
@@ -164,13 +170,13 @@ def control_server():
                 except ProcessLookupError:
                     return jsonify({"status": "error", "message": "Process not found"}), 404
             return jsonify({"status": "error", "message": "No PID recorded for this server"}), 400
-            
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    """Start the packager GUI bridge. Binds to all interfaces so Vite can reach it."""
     # Running on 5001 to avoid conflict with standard Streamlit/Vite ports
     print("🚀 Starting GUI Bridge on port 5001...")
-    # debug=True causes reloader issues in some environments.
-    # host='0.0.0.0' ensures we bind to all interfaces, fixing potential localhost/127.0.0.1 mismatches.
+    # debug=False prevents Werkzeug interactive debugger from exposing the server
     app.run(host='0.0.0.0', port=5001, debug=False)
