@@ -129,11 +129,23 @@ def fetch_nexus_repo(name: str, target_dir: Path, update=False, url_override: Op
         if target_dir.exists() and (target_dir / ".git").exists():
             if update:
                 print(f"🔄 Updating {name}...")
-                if DEVLOG:
-                    run_capture(["git", "-C", str(target_dir), "pull"], devlog=DEVLOG, check=True)
-                else:
-                    subprocess.run(["git", "-C", str(target_dir), "pull"], check=True)
-                return True
+                # Harden: if in industrial/managed mode, we should be able to force a clean update
+                # to avoid the 'local changes' error seen in logs.
+                try:
+                    # Attempt a clean pull: reset any manual patches or untracked logs
+                    subprocess.run(["git", "-C", str(target_dir), "reset", "--hard", "HEAD"], check=False)
+                    subprocess.run(["git", "-C", str(target_dir), "clean", "-fd"], check=False)
+                    
+                    if DEVLOG:
+                        run_capture(["git", "-C", str(target_dir), "pull"], devlog=DEVLOG, check=True)
+                    else:
+                        subprocess.run(["git", "-C", str(target_dir), "pull"], check=True)
+                    return True
+                except subprocess.CalledProcessError:
+                    # If pull fails (e.g. network), we still return True if the dir exists, 
+                    # but we warn the user.
+                    print(f"⚠️  Failed to pull latest for {name}. Using cached version.")
+                    return True
             return True
             
         print(f"📥 Fetching {name} from GitHub...")
@@ -286,9 +298,13 @@ def get_workspace_root():
     candidates = [
         Path.cwd(),
         Path(__file__).resolve().parent.parent,
+        # NEW: Check if this script itself is inside a sibling repo and look at its PARENT
+        Path(__file__).resolve().parent.parent.parent
     ]
     for base in candidates:
         try:
+            if not base or not base.is_dir():
+                continue
             # Never treat the central install dir (~/.mcp-tools) as a source workspace.
             if _is_central_install_dir(base):
                 continue
