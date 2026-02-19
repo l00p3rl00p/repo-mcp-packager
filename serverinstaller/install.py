@@ -104,7 +104,7 @@ class SheshaInstaller:
         self.suite_root = self.project_root.parent # /repo-mcp-packager -> /mcp-creater-manager
         
         # Initialize components
-        self.auditor = Auditor(self.project_root)
+        self.auditor = EnvironmentAuditor(self.project_root)
         self.artifacts = []
         self.mcp_attachments = []
     def ensure_executable(self, path: Path):
@@ -753,9 +753,8 @@ requires-python = ">=3.6"
         if engine_installer.exists():
             print(f"[*] Bootstrapping Knowledge Base...")
             cmd = [sys.executable, str(engine_installer)]
-            # If we know what IDEs to attach to, pass them along
-            if self.args.attach_to:
-                cmd.extend(["--attach-to"] + self.args.attach_to)
+            # if self.args.attach_to:
+            #     cmd.extend(["--attach-to"] + self.args.attach_to)
             
             subprocess.run(cmd, cwd=engine_dir, check=True)
             self.register_artifact(engine_dir)
@@ -777,8 +776,7 @@ requires-python = ">=3.6"
             # After forge, we might want to continue installation in the new target
             self.project_root = target
             # Re-initialize auditor for the new target
-            from audit import Auditor
-            self.auditor = Auditor(self.project_root)
+            self.auditor = EnvironmentAuditor(self.project_root)
 
         if not self.args.headless and not sys.stdin.isatty():
             self.error("Interactive mode requires a TTY. Use --headless for automated install.")

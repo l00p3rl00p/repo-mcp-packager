@@ -1,0 +1,16 @@
+[project]
+name = "mcp-activator"
+version = "3.3.0"
+description = "Industrial MCP server orchestration and installation."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "psutil>=5.9.0",
+  "pathspec>=0.11.0",
+]
+
+[project.scripts]
+mcp-activator = "bootstrap:main"
+
+[tool.setuptools]
+py-modules = ["bootstrap"]
