@@ -236,7 +236,7 @@ def _detach_suite_from_client_config(path: Path, *, verbose: bool = False, devlo
         return removed
     except Exception as e:
         if verbose:
-            print(f"⚠️  Client detach failed for {path}: {e}")
+            print(f"[warn] Client detach failed for {path}: {e}")
         if devlog:
             _write_devlog(devlog, "client_detach_failed", {"path": str(path), "error": str(e)})
         return 0
@@ -274,7 +274,7 @@ class NexusUninstaller:
             return self.run_central_only()
 
         if not self.manifest_path.exists():
-            print(f"⚠️  No installation manifest found at {self.manifest_path}.")
+            print(f"[warn] No installation manifest found at {self.manifest_path}.")
             print("   Proceeding with directory clean-up mode (fallback).")
             manifest = {}
         else:
@@ -462,7 +462,7 @@ class NexusUninstaller:
         if deduped:
             print()
             if not self.kill_venv:
-                print("ℹ️  --kill-venv not set: preserving ~/.mcp-tools/.venv (if present).")
+                print("[info] --kill-venv not set: preserving ~/.mcp-tools/.venv (if present).")
                 print("   If you want a complete wipe (including environments), re-run with --kill-venv.")
             if not self.yes and not _confirm("Proceed with deleting the above items?"):
                 self.log("User aborted uninstall.")
@@ -502,7 +502,7 @@ class NexusUninstaller:
                 if self.devlog:
                     _write_devlog(self.devlog, "removed", {"path": str(path), "reason": reason})
             except Exception as e:
-                print(f"⚠️  Failed to remove {path}: {e}")
+                print(f"[warn] Failed to remove {path}: {e}")
                 if self.devlog:
                     _write_devlog(self.devlog, "remove_failed", {"path": str(path), "error": str(e), "reason": reason})
 
@@ -530,11 +530,11 @@ class NexusUninstaller:
         remaining = len(siblings)
         
         if remaining > 1:
-            self.log(f"ℹ️  Keeping shared Nexus ({remaining} tools detected).")
+            self.log(f"[info] Keeping shared Nexus ({remaining} tools detected).")
         elif remaining == 1:
             # Often the last folder is just an empty shell or a config file
             # Let's ask the user
-            print(f"\n⚠️  You seem to be the last tool standing.")
+            print("\n[warn] You seem to be the last tool standing.")
             print(f"   Nexus location: {nexus}")
             print(f"   Contents: {[s.name for s in siblings]}")
             choice = input(f"   Remove shared Nexus data and config? [y/N]: ").strip().lower()
@@ -551,7 +551,7 @@ class NexusUninstaller:
     def remove_mcp_attachments(self, attached_clients: list):
         """Remove MCP server entries from IDE configs"""
         if not MCP_REMOVAL_AVAILABLE:
-            self.log("⚠️  MCP removal not available. Skipping IDE config cleanup.")
+            self.log("[warn] MCP removal not available. Skipping IDE config cleanup.")
             return
         
         self.log(f"Removing MCP attachments from {len(attached_clients)} IDE(s)...")
