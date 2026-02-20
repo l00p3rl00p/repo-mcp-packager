@@ -147,9 +147,11 @@ def control_server():
             if not cmd:
                 return jsonify({"error": "No start command defined for this server"}), 400
 
-            # shell=True used here intentionally with inventory-sourced commands only
-            # (inventory is operator-written, not user-supplied via the API)
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # SECURITY: avoid shell=True. Treat inventory commands as argv, not shell strings.
+            argv = shlex.split(cmd) if isinstance(cmd, str) else cmd
+            if not isinstance(argv, list) or not argv:
+                return jsonify({"error": "Invalid start command"}), 400
+            proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pids[s_id] = proc.pid
 
             with open(runtime_path, "w") as f:
@@ -179,4 +181,5 @@ if __name__ == '__main__':
     # Running on 5001 to avoid conflict with standard Streamlit/Vite ports
     print("🚀 Starting GUI Bridge on port 5001...")
     # debug=False prevents Werkzeug interactive debugger from exposing the server
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    host = os.environ.get("NEXUS_BIND", "127.0.0.1")
+    app.run(host=host, port=5001, debug=False)

@@ -242,6 +242,8 @@ def install_user_wrappers(
         "mcp-observer": central / "bin" / "mcp-observer",
         "mcp-librarian": central / "bin" / "mcp-librarian",
         "mcp-activator": central / "bin" / "mcp-activator",
+        # Rule of Ones: one front door.
+        "nexus": central / "bin" / "nexus",
     }
 
     for name, target in commands.items():
@@ -751,6 +753,8 @@ def create_hardened_entry_points(central: Path):
         # Nexus Control Surface (local GUI command runner). Kept as a separate entry point
         # so it remains usable from the central install even if the original workspace is deleted.
         "mcp-nexus-gui": ("repo-mcp-packager", "gui/server.py", False),
+        # Rule of Ones: single front-door launcher (tray + dashboard).
+        "nexus": ("mcp-server-manager", "nexus_tray.py", False),
     }
     
     for cmd, (repo, module, use_m) in commands.items():
@@ -793,7 +797,7 @@ else
     PY="$(command -v python3 || command -v python)"
   fi
 fi
-export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/repo-mcp-packager:$PYTHONPATH"
+export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/mcp-server-manager:{central}/repo-mcp-packager:$PYTHONPATH"
 "$PY" "{target_script}" "$@"
 """
         try:
