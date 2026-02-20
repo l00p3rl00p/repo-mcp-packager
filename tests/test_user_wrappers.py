@@ -43,7 +43,7 @@ class TestUserWrappers(unittest.TestCase):
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        SheshaUninstaller = module.SheshaUninstaller
+        NexusUninstaller = module.NexusUninstaller
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_home = Path(tmp)
@@ -62,7 +62,7 @@ class TestUserWrappers(unittest.TestCase):
             old_home = os.environ.get("HOME")
             os.environ["HOME"] = str(tmp_home)
             try:
-                u = SheshaUninstaller(
+                u = NexusUninstaller(
                     project_root=tmp_home / "dummy-project",
                     kill_venv=True,
                     purge_data=True,

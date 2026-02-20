@@ -1,4 +1,4 @@
-# Shesha Clean Room Installer
+# Nexus Clean Room Installer
 
 **The portable wavefront for Git-Packager. High-precision installation, isolation, and bridging.**
 
@@ -35,7 +35,7 @@ python install.py
 
 ## 🔍 Overview
 
-The Shesha Clean Room Installer is a standalone directory that can be dropped into any project codebase. It intelligently probes the host system, identifies available components (Python, Node, Docker), and allows for elective installation with automated environment configuration.
+The Nexus Clean Room Installer is a standalone directory that can be dropped into any project codebase. It intelligently probes the host system, identifies available components (Python, Node, Docker), and allows for elective installation with automated environment configuration.
 
 ---
 
@@ -120,10 +120,10 @@ See [MCP_INJECTOR_README.md](../MCP_INJECTOR_README.md) for details.
 ---
 **Status**: Production-ready for agent-driven replication.
 
-# MCP Injector
-For this to work really well, we recommmden usind mcp-injector_install.sh to install the MCP injector. This will create a mcp-inject binary in your PATH. This will allow you to add MCP servers to any IDE config file. 
+## MCP Injector
+For best results, install the MCP injector via `mcp-injector_install.sh`. This creates an `mcp-inject` binary in your PATH and allows you to add MCP servers to IDE config files.
 
-THis is located at the repo https://github.com/l00pe3mcp-injector
+This is located at the MCP Injector repository (see `../mcp-injector/README.md` in this workspace).
 
 ---
 

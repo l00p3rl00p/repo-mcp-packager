@@ -15,7 +15,7 @@ spec = importlib.util.spec_from_file_location("packager_install", INSTALL_PATH)
 packager_install = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(packager_install)
-SheshaInstaller = packager_install.SheshaInstaller
+NexusInstaller = packager_install.NexusInstaller
 get_global_ide_paths = packager_install.get_global_ide_paths
 
 
@@ -31,7 +31,7 @@ class PackagerResilienceTests(unittest.TestCase):
     def test_preflight_permission_failure_exits_cleanly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = make_args()
-            installer = SheshaInstaller(args)
+            installer = NexusInstaller(args)
             installer.project_root = Path(temp_dir)
             os.chmod(temp_dir, stat.S_IREAD | stat.S_IEXEC)
             try:
@@ -43,7 +43,7 @@ class PackagerResilienceTests(unittest.TestCase):
     def test_setup_npm_reports_missing_dependency(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = make_args()
-            installer = SheshaInstaller(args)
+            installer = NexusInstaller(args)
             installer.project_root = Path(temp_dir)
             gui_dir = installer.project_root / "gui"
             gui_dir.mkdir(parents=True, exist_ok=True)

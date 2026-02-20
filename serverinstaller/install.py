@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-__version__ = "3.3.0"
+__version__ = "3.3.1"
 
 # Ensure we can import from the same directory
 sys.path.append(str(Path(__file__).parent))
@@ -94,7 +94,7 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
             except Exception:
                 pass
 
-class SheshaInstaller:
+class NexusInstaller:
     def __init__(self, args: argparse.Namespace):
         self.args = args
         self.portable_root = Path(__file__).parent.resolve()
@@ -289,10 +289,34 @@ class SheshaInstaller:
                 sys.exit(1)
         else:
             self.log(f"Virtual environment already exists at {venv_path}")
-        
+
+        venv_python = venv_path / "bin" / "python3"
+        if not venv_python.exists():
+            # Some environments name it "python"
+            venv_python = venv_path / "bin" / "python"
+
+        # Headless MUST be zero-touch: re-exec inside the venv automatically.
+        if self.args.headless:
+            if os.environ.get("NEXUS_SERVERINSTALLER_VENV_REEXEC") == "1" or os.environ.get("SHESHA_SERVERINSTALLER_VENV_REEXEC") == "1":
+                # We tried to re-exec but still aren't in a venv.
+                self.error("Headless install could not enter the virtual environment.")
+                self.error(f"Expected venv python at: {venv_python}")
+                sys.exit(1)
+
+            if not venv_python.exists():
+                self.error("Headless install failed: virtual environment python not found.")
+                self.error(f"Expected venv python at: {venv_python}")
+                sys.exit(1)
+
+            self.log("Headless mode: re-launching installer inside the virtual environment (zero-touch).")
+            env = os.environ.copy()
+            env["NEXUS_SERVERINSTALLER_VENV_REEXEC"] = "1"
+            res = subprocess.run([str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]], cwd=self.project_root, env=env)
+            raise SystemExit(res.returncode)
+
+        # Interactive: tell the human how to activate.
         self.log(f"Virtual environment ready. Please activate it before continuing.")
-        if not self.args.headless:
-            self.log(f"Command: source {venv_path}/bin/activate")
+        self.log(f"Command: source {venv_path}/bin/activate")
 
     def install_python_deps(self, discovery: Dict[str, Any]):
         if discovery.get("has_requirements"):
@@ -577,11 +601,11 @@ requires-python = ">=3.6"
                     "args": [str(self.project_root / "mcp_server.py")]
                 }
             elif discovery.get("python_project") and (self.project_root / "src").exists():
-                # Check for Shesha/Librarian MCP server
-                librarian_mcp = self.project_root / "src" / "shesha" / "librarian" / "mcp.py"
+                # Check for legacy Librarian MCP server
+                librarian_mcp = self.project_root / "src" / "nexus" / "librarian" / "mcp.py"
                 if librarian_mcp.exists():
                     server_config = {
-                        "name": "shesha",
+                        "name": "nexus-librarian",
                         "command": str(self.project_root / ".venv" / "bin" / "librarian"),
                         "args": ["mcp", "run"]
                     }
@@ -627,7 +651,7 @@ requires-python = ">=3.6"
                     })
 
     def setup_path(self, audit: Dict[str, Any]):
-        """Offer to add Shesha to PATH with markers for surgical reversal."""
+        """Offer to add Nexus to PATH with markers for surgical reversal."""
         if not getattr(self.args, "add_venv_to_path", False):
             return
         if self.args.headless:
@@ -653,16 +677,16 @@ requires-python = ">=3.6"
         if rc_file.exists() and export_line in rc_file.read_text():
             return
 
-        self.log(f"\nOptional: add Shesha to PATH so 'librarian' is available everywhere.")
+        self.log(f"\nOptional: add Nexus to PATH so 'librarian' is available everywhere.")
         self.log(f"  This will modify: {rc_file}")
-        self.log(f"  (Markers # Shesha Block START/END will be used for safe reversal)")
+        self.log(f"  (Markers # Nexus Block START/END will be used for safe reversal)")
         
         choice = input("Add to PATH? [y/N]: ").strip().lower()
         if choice != "y":
             return
 
-        marker_start = "# Shesha Block START"
-        marker_end = "# Shesha Block END"
+        marker_start = "# Workforce Nexus Block START"
+        marker_end = "# Workforce Nexus Block END"
         
         block = f"\n{marker_start}\n{export_line}\n{marker_end}\n"
         
@@ -790,7 +814,7 @@ requires-python = ">=3.6"
             # Hard requirement check
             py_major, py_minor = map(int, audit.python_version.split('.'))
             if (py_major, py_minor) < (3, 11):
-                self.log(f"WARNING: Python {audit.python_version} detected. Most Shesha/MCP projects require 3.11+.")
+                self.log(f"WARNING: Python {audit.python_version} detected. Most Nexus/MCP projects require 3.11+.")
                 if self.args.docker_policy == "fail":
                     self.error("Python version incompatible.")
 
@@ -931,7 +955,7 @@ requires-python = ">=3.6"
             raise
 
 def main():
-    parser = argparse.ArgumentParser(description="Shesha Clean Room Installer")
+    parser = argparse.ArgumentParser(description="Nexus Clean Room Installer")
     parser.add_argument("--headless", action="store_true", help="Non-interactive install")
     parser.add_argument("--no-gui", action="store_true", help="Skip GUI installation")
     parser.add_argument("--npm-policy", choices=["local", "global", "auto"], default="auto")
@@ -961,8 +985,11 @@ def main():
     from audit import AuditResult
     import dataclasses
     
-    installer = SheshaInstaller(args)
+    installer = NexusInstaller(args)
     installer.run()
 
 if __name__ == "__main__":
     main()
+
+# Backwards-compatible alias for older imports/tests.
+SheshaInstaller = NexusInstaller

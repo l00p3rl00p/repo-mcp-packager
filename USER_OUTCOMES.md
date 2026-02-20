@@ -4,6 +4,15 @@ This document defines what success looks like for the "Clean Room Installer" and
 
 ---
 
+## 🔗 Canonical Outcomes (Project Scope)
+
+This repo-level `USER_OUTCOMES.md` is subordinate to the canonical, project-wide outcomes:
+
+* `/Users/almowplay/Developer/Github/mcp-creater-manager/USER_OUTCOMES.md`
+* `/Users/almowplay/Developer/Github/mcp-creater-manager/EVIDENCE.md`
+
+If there is drift between this file and the canonical outcomes/evidence, treat this file as informational only and update it to match the canonical sources.
+
 ## ⚡ Quick Summary
 * **Mission Statement**: To provide a "Just Works" installation experience that creates zero-leak, isolated environments allowing agents to replicate the packager stack without friction.
 

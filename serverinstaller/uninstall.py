@@ -152,7 +152,7 @@ def _remove_user_wrappers(verbose: bool = False, devlog: Optional[Path] = None) 
             continue
 
 
-class SheshaUninstaller:
+class NexusUninstaller:
     def __init__(
         self,
         project_root: Path,
@@ -213,8 +213,12 @@ class SheshaUninstaller:
             self.log(f"Found {len(artifacts)} tracked artifacts for removal.")
 
         # 1. Remove tracked artifacts (files/dirs or surgical blocks)
-        marker_start = "# Shesha Block START"
-        marker_end = "# Shesha Block END"
+        # Backward compatible: remove legacy markers used across prior iterations.
+        marker_pairs = [
+            ("# Workforce Nexus Block START", "# Workforce Nexus Block END"),
+            ("# Nexus Block START", "# Nexus Block END"),
+            ("# Shesha Block START", "# Shesha Block END"),
+        ]
 
         for path_str in artifacts:
             path = Path(path_str)
@@ -226,7 +230,7 @@ class SheshaUninstaller:
             if path.is_file():
                 try:
                     content = path.read_text(encoding="utf-8")
-                    if marker_start in content:
+                    if any(ms in content for ms, _ in marker_pairs):
                         is_surgical = True
                 except Exception:
                     pass
@@ -236,15 +240,25 @@ class SheshaUninstaller:
                 lines = path.read_text(encoding="utf-8").splitlines()
                 new_lines = []
                 inside_block = False
+                active_end = None
                 for line in lines:
-                    if line.strip() == marker_start:
-                        inside_block = True
-                        continue
-                    if line.strip() == marker_end:
-                        inside_block = False
-                        continue
+                    stripped = line.strip()
                     if not inside_block:
+                        for ms, me in marker_pairs:
+                            if stripped == ms:
+                                inside_block = True
+                                active_end = me
+                                break
+                        if inside_block:
+                            continue
                         new_lines.append(line)
+                        continue
+
+                    # inside a surgical block
+                    if active_end and stripped == active_end:
+                        inside_block = False
+                        active_end = None
+                        continue
                 
                 path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
                 continue
@@ -454,7 +468,7 @@ class SheshaUninstaller:
         self.log(f"Removed from {success_count}/{len(results)} IDE config(s)")
 
 def main():
-    parser = argparse.ArgumentParser(description="Shesha Clean Room Uninstaller")
+    parser = argparse.ArgumentParser(description="Nexus Clean Room Uninstaller")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the virtual environment as well")
     parser.add_argument("--purge-data", action="store_true", help="Remove central suite data (~/.mcp-tools) and observer state (~/.mcpinv)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
@@ -472,7 +486,7 @@ def main():
         if args.verbose:
             print(f"[-] Devlog: {devlog_path}")
 
-    uninstaller = SheshaUninstaller(
+    uninstaller = NexusUninstaller(
         root,
         kill_venv=args.kill_venv,
         purge_data=args.purge_data,
@@ -488,3 +502,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Backwards-compatible alias for older imports/tests.
+SheshaUninstaller = NexusUninstaller

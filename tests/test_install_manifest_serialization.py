@@ -13,7 +13,7 @@ install_spec = importlib.util.spec_from_file_location("packager_install", INSTAL
 packager_install = importlib.util.module_from_spec(install_spec)
 assert install_spec and install_spec.loader
 install_spec.loader.exec_module(packager_install)
-SheshaInstaller = packager_install.SheshaInstaller
+NexusInstaller = packager_install.NexusInstaller
 
 
 class PackagerManifestWriteTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class PackagerManifestWriteTests(unittest.TestCase):
             project = Path(temp_dir)
             (project / "artifact.txt").write_text("x", encoding="utf-8")
 
-            installer = SheshaInstaller.__new__(SheshaInstaller)
+            installer = NexusInstaller.__new__(NexusInstaller)
             installer.args = types.SimpleNamespace(managed=False, headless=True)
             installer.project_root = project
             installer.artifacts = [project / "artifact.txt"]
@@ -38,4 +38,3 @@ class PackagerManifestWriteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

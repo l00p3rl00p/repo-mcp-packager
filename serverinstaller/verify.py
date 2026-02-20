@@ -48,7 +48,7 @@ def _append_warning(project_root: Path, message: str) -> None:
     except Exception:
         return
 
-class SheshaVerifier:
+class NexusVerifier:
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.manifest_path = self.project_root / ".librarian" / "manifest.json"
@@ -123,5 +123,8 @@ class SheshaVerifier:
 
 if __name__ == "__main__":
     root = Path(__file__).parent.parent.resolve()
-    verifier = SheshaVerifier(root)
+    verifier = NexusVerifier(root)
     verifier.generate_report()
+
+# Backwards-compatible alias for older imports/tests.
+SheshaVerifier = NexusVerifier

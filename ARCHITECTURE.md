@@ -38,7 +38,7 @@ Provides the **True Start Protocol**.
 ### 4. Registry & State
 Managed via `manifest.json` and the shared `.mcpinv` directory.
 * **Atomic Tracking**: Every artifact is tracked for clean uninstallation.
-* **Versioning**: Enforces suite-wide version synchronization (currently v3.2.1).
+* **Versioning**: Enforces suite-wide version synchronization (currently v3.3.1).
 
 ---
 
@@ -58,6 +58,6 @@ Every command adds to a rollback journal.
 ---
 
 ## 📝 Metadata
-* **Status**: Production Ready (v3.2.1)
+* **Status**: Production Ready (v3.3.1)
 * **Author**: l00p3rl00p
 * **Part of**: The Workforce Nexus Suite

@@ -1,4 +1,4 @@
-# Architecture - Shesha Clean Room Installer
+# Architecture - Nexus Clean Room Installer
 
 Technical logic, modular scripts, and developer workflow for the portable clean room installer.
 

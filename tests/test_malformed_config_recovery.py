@@ -19,7 +19,7 @@ verify_spec = importlib.util.spec_from_file_location("packager_verify", VERIFY_P
 packager_verify = importlib.util.module_from_spec(verify_spec)
 assert verify_spec and verify_spec.loader
 verify_spec.loader.exec_module(packager_verify)
-SheshaVerifier = packager_verify.SheshaVerifier
+NexusVerifier = packager_verify.NexusVerifier
 
 
 class PackagerMalformedConfigTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class PackagerMalformedConfigTests(unittest.TestCase):
             manifest = project / ".librarian" / "manifest.json"
             manifest.parent.mkdir(parents=True, exist_ok=True)
             manifest.write_text("{ bad-json", encoding="utf-8")
-            verifier = SheshaVerifier(project)
+            verifier = NexusVerifier(project)
             with mock.patch("builtins.print") as p:
                 verifier.generate_report()
             p.assert_not_called()

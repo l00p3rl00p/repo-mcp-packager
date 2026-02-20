@@ -32,7 +32,7 @@ class InjectPingRoundtripTests(unittest.TestCase):
                     str(config_path),
                     "--add",
                 ],
-                input="4\nmcp-maker-dummy\npython3\n" + str(server_path) + ",--ping\nn\n\n",
+                input="custom\nmcp-maker-dummy\npython3\n" + str(server_path) + ",--ping\nn\n\n",
                 text=True,
                 capture_output=True,
             )

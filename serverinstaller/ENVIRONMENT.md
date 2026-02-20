@@ -1,4 +1,4 @@
-# ENVIRONMENT.md — Shesha Clean Room Installer (serverinstaller)
+# ENVIRONMENT.md — Nexus Clean Room Installer (serverinstaller)
 
 Environment expectations and safety boundaries for the **canonical installer/uninstaller** shipped by the Nexus suite.
 
@@ -59,4 +59,3 @@ It will:
 ## 📝 Metadata
 * **Status**: Hardened
 * **Reference**: [README.md](./README.md)
-
