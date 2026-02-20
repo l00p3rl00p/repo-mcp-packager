@@ -11,6 +11,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Uninstall MCP Workforce Nexus (repo entrypoint)")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the local .venv (if present)")
     parser.add_argument("--purge-data", action="store_true", help="Purge shared Nexus data (~/.mcp-tools and ~/.mcpinv)")
+    parser.add_argument("--detach-clients", action="store_true", help="Remove Nexus suite servers from detected IDE clients")
+    parser.add_argument("--remove-path-block", action="store_true", help="Remove PATH injection block from shell rc files")
+    parser.add_argument("--remove-wrappers", action="store_true", help="Remove user wrapper scripts (e.g., ~/.local/bin/mcp-*)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
@@ -23,6 +26,12 @@ def main() -> int:
         forwarded.append("--kill-venv")
     if ns.purge_data:
         forwarded.append("--purge-data")
+    if ns.detach_clients:
+        forwarded.append("--detach-clients")
+    if ns.remove_path_block:
+        forwarded.append("--remove-path-block")
+    if ns.remove_wrappers:
+        forwarded.append("--remove-wrappers")
     if ns.verbose:
         forwarded.append("--verbose")
     if ns.devlog:

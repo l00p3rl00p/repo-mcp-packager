@@ -151,6 +151,96 @@ def _remove_user_wrappers(verbose: bool = False, devlog: Optional[Path] = None) 
         except Exception:
             continue
 
+def _client_config_paths() -> list[tuple[str, Path]]:
+    """
+    Best-effort detection of MCP client config files for uninstall cleanup.
+
+    This avoids importing the injector (which may already be partially removed during purge).
+    """
+    home = _home()
+    out: list[tuple[str, Path]] = []
+    if sys.platform == "darwin":
+        out.append(("claude", home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"))
+        out.append(("codex", home / "Library" / "Application Support" / "Codex" / "mcp_servers.json"))
+        out.append(("xcode", home / "Library" / "Developer" / "Xcode" / "UserData" / "MCPServers" / "config.json"))
+    elif sys.platform == "win32":
+        appdata = Path(os.environ.get("APPDATA", str(home)))
+        localapp = Path(os.environ.get("LOCALAPPDATA", str(home)))
+        out.append(("claude", appdata / "Claude" / "claude_desktop_config.json"))
+        out.append(("codex", appdata / "Codex" / "mcp_servers.json"))
+        out.append(("xcode", localapp / "Xcode" / "MCPServers" / "config.json"))
+    else:
+        # Linux: best-effort locations (may vary by packaging).
+        out.append(("claude", home / ".config" / "Claude" / "claude_desktop_config.json"))
+        out.append(("codex", home / ".config" / "Codex" / "mcp_servers.json"))
+    return out
+
+def _looks_like_suite_server(name: str, server_def: object) -> bool:
+    try:
+        n = (name or "").lower()
+        if n.startswith("nexus-") or n.startswith("mcp-"):
+            # avoid nuking user servers named mcp-foo; rely on command path check too
+            pass
+
+        cmd = ""
+        if isinstance(server_def, dict):
+            cmd = str(server_def.get("command") or "")
+        cmd_l = cmd.lower()
+        return (".mcp-tools" in cmd_l) or ("mcp-tools" in cmd_l) or n.startswith("nexus-")
+    except Exception:
+        return False
+
+def _detach_suite_from_client_config(path: Path, *, verbose: bool = False, devlog: Optional[Path] = None) -> int:
+    """
+    Remove suite-installed servers from a client config JSON file.
+
+    Heuristic: remove servers whose command points into ~/.mcp-tools OR whose name starts with nexus-.
+    """
+    try:
+        if not path.exists() or not path.is_file():
+            return 0
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        data = json.loads(raw) if raw.strip() else {}
+        if not isinstance(data, dict):
+            return 0
+
+        removed = 0
+
+        # Common shapes: {mcpServers: {...}} or {mcp_servers: {...}}.
+        for key in ("mcpServers", "mcp_servers", "servers"):
+            block = data.get(key)
+            if isinstance(block, dict):
+                doomed = [k for k, v in block.items() if _looks_like_suite_server(k, v)]
+                for k in doomed:
+                    try:
+                        del block[k]
+                        removed += 1
+                    except Exception:
+                        continue
+
+        if removed <= 0:
+            return 0
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        backup = path.with_suffix(path.suffix + f".backup.{stamp}")
+        try:
+            backup.write_text(raw, encoding="utf-8")
+        except Exception:
+            pass
+
+        path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if verbose:
+            print(f"[-] Detached {removed} suite server(s) from {path}")
+        if devlog:
+            _write_devlog(devlog, "client_detach", {"path": str(path), "removed": removed, "backup": str(backup)})
+        return removed
+    except Exception as e:
+        if verbose:
+            print(f"⚠️  Client detach failed for {path}: {e}")
+        if devlog:
+            _write_devlog(devlog, "client_detach_failed", {"path": str(path), "error": str(e)})
+        return 0
+
 
 class NexusUninstaller:
     def __init__(
@@ -303,6 +393,19 @@ class NexusUninstaller:
         # Central suite cleanup:
         # - If --kill-venv is set: delete ~/.mcp-tools entirely (includes .venv)
         # - If --kill-venv is NOT set: delete everything under ~/.mcp-tools EXCEPT .venv
+        # Optional: detach from IDE clients BEFORE deleting ~/.mcp-tools (since it contains injector code).
+        if getattr(self, "detach_clients", False):
+            removed_total = 0
+            for _, cfg in _client_config_paths():
+                removed_total += _detach_suite_from_client_config(cfg, verbose=self.verbose, devlog=self.devlog)
+            if self.verbose:
+                print(f"[-] Detached suite servers from clients: removed={removed_total}")
+
+        if getattr(self, "remove_path_block", False):
+            _remove_path_block(verbose=self.verbose, devlog=self.devlog)
+        if getattr(self, "remove_wrappers", False):
+            _remove_user_wrappers(verbose=self.verbose, devlog=self.devlog)
+
         if nexus.exists():
             venv = nexus / ".venv"
             if self.kill_venv:
@@ -313,9 +416,6 @@ class NexusUninstaller:
                     if child.name == ".venv":
                         continue
                     targets.append(("dir" if child.is_dir() else "file", child, "central suite component"))
-
-                if venv.exists():
-                    targets.append(("dir", venv, "kept: nexus venv (~/.mcp-tools/.venv)"))
 
         # Observer state/logs cleanup
         # If --devlog is enabled, preserve ~/.mcpinv/devlogs so the forensic trail survives the purge.
@@ -338,7 +438,7 @@ class NexusUninstaller:
             seen.add(path)
             deduped.append((kind, path, reason))
 
-        print("\n🧹 Nexus Uninstall (Central-Only)")
+        print("\nNexus Uninstall (Central-Only)")
         print("=" * 60)
         if deduped:
             print("Planned removals:")
@@ -376,9 +476,11 @@ class NexusUninstaller:
                 _write_devlog(self.devlog, "dry_run", {"targets": [str(p) for _, p, _ in deduped]})
             return 0
 
-        # Remove PATH block if we are purging.
-        _remove_path_block(verbose=self.verbose, devlog=self.devlog)
-        _remove_user_wrappers(verbose=self.verbose, devlog=self.devlog)
+        # Optional PATH cleanup (only when explicitly requested).
+        if getattr(self, "remove_path_block", False):
+            _remove_path_block(verbose=self.verbose, devlog=self.devlog)
+        if getattr(self, "remove_wrappers", False):
+            _remove_user_wrappers(verbose=self.verbose, devlog=self.devlog)
 
         # Perform deletions (skip any “kept” markers)
         for kind, path, reason in deduped:
@@ -471,6 +573,9 @@ def main():
     parser = argparse.ArgumentParser(description="Nexus Clean Room Uninstaller")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the virtual environment as well")
     parser.add_argument("--purge-data", action="store_true", help="Remove central suite data (~/.mcp-tools) and observer state (~/.mcpinv)")
+    parser.add_argument("--detach-clients", action="store_true", help="Remove suite servers from detected IDE client configs")
+    parser.add_argument("--remove-path-block", action="store_true", help="Remove PATH injection block from shell rc files")
+    parser.add_argument("--remove-wrappers", action="store_true", help="Remove user wrapper scripts (e.g., ~/.local/bin/mcp-*)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
     parser.add_argument("--devlog", action="store_true", help="Write a dev log (JSONL) with 90-day retention")
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
@@ -495,6 +600,9 @@ def main():
         yes=args.yes,
         dry_run=args.dry_run,
     )
+    uninstaller.detach_clients = bool(args.detach_clients)
+    uninstaller.remove_path_block = bool(args.remove_path_block)
+    uninstaller.remove_wrappers = bool(args.remove_wrappers)
     rc = uninstaller.run()
     if devlog_path:
         _write_devlog(devlog_path, "end", {"rc": rc if rc is not None else 0})

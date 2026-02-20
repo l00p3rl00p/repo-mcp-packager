@@ -71,6 +71,8 @@ class TestUserWrappers(unittest.TestCase):
                     yes=True,
                     dry_run=False,
                 )
+                # Wrapper cleanup is opt-in.
+                u.remove_wrappers = True
                 rc = u.run()
                 self.assertEqual(rc, 0)
             finally:

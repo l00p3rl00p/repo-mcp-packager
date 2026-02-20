@@ -45,7 +45,7 @@ class TestUninstallPathBlock(unittest.TestCase):
             env["HOME"] = str(home)
             env["SHELL"] = "/bin/zsh"
 
-            res = run_cmd("--purge-data", "--yes", env=env)
+            res = run_cmd("--purge-data", "--remove-path-block", "--yes", env=env)
             self.assertEqual(res.returncode, 0, res.stderr + "\n" + res.stdout)
 
             content = zshrc.read_text(encoding="utf-8")
@@ -82,7 +82,7 @@ class TestUninstallPathBlock(unittest.TestCase):
             env["HOME"] = str(home)
             env["SHELL"] = "/bin/bash"
 
-            res = run_cmd("--purge-data", "--yes", env=env)
+            res = run_cmd("--purge-data", "--remove-path-block", "--yes", env=env)
             self.assertEqual(res.returncode, 0, res.stderr + "\n" + res.stdout)
 
             content = bashrc.read_text(encoding="utf-8")
@@ -94,4 +94,3 @@ class TestUninstallPathBlock(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
