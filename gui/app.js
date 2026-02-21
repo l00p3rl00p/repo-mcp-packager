@@ -17,6 +17,18 @@ const daemonLogOutput = document.getElementById("daemonLogOutput");
 let widgetModel = { widgets: [] };
 let selectedWidget = null;
 
+function _el(tag, attrs = {}, text = null) {
+  const node = document.createElement(tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => {
+    if (v === null || v === undefined) return;
+    if (k === "className") node.className = String(v);
+    else if (k === "title") node.title = String(v);
+    else node.setAttribute(k, String(v));
+  });
+  if (text !== null && text !== undefined) node.textContent = String(text);
+  return node;
+}
+
 function setStatus(state) {
   runStatus.className = `badge ${state}`;
   runStatus.textContent = state;
@@ -28,20 +40,27 @@ function isAvailableInTier(widget, tier) {
 
 function renderWidgets() {
   const tier = tierSelect.value;
-  widgetGrid.innerHTML = "";
+  widgetGrid.textContent = "";
 
   widgetModel.widgets.forEach((widget) => {
     const available = isAvailableInTier(widget, tier);
     const node = document.createElement("article");
     node.className = `widget ${available ? "" : "unavailable"}`;
-    node.innerHTML = `
-      <div class="widget-head">
-        <strong>${widget.title}</strong>
-        <span class="checkbox ${available ? "checked" : ""}" title="${available ? "enabled" : "disabled"}"></span>
-      </div>
-      <p>${widget.description}</p>
-      <small>${widget.hardened_only ? "Hardened-only behavior" : "Available behavior"}</small>
-    `;
+    const head = _el("div", { className: "widget-head" });
+    head.appendChild(_el("strong", {}, widget.title || ""));
+    head.appendChild(
+      _el(
+        "span",
+        {
+          className: `checkbox ${available ? "checked" : ""}`,
+          title: available ? "enabled" : "disabled"
+        },
+        ""
+      )
+    );
+    node.appendChild(head);
+    node.appendChild(_el("p", {}, widget.description || ""));
+    node.appendChild(_el("small", {}, widget.hardened_only ? "Hardened-only behavior" : "Available behavior"));
     node.addEventListener("click", () => {
       selectedWidget = widget;
       widgetIdInput.value = widget.id;
@@ -92,20 +111,30 @@ function renderDaemons(daemons) {
   }
   daemonsEmpty.hidden = true;
   daemonList.hidden = false;
-  daemonList.innerHTML = "";
+  daemonList.textContent = "";
   list.forEach((d) => {
     const node = document.createElement("div");
     node.className = "daemon-item";
     const pid = d.pid || "";
-    node.innerHTML = `
-      <div class="row">
-        <strong>${d.widget_id || "daemon"}</strong>
-        <span class="muted">pid=${pid}</span>
-      </div>
-      <div class="muted">cwd: <code>${d.cwd || ""}</code></div>
-      <div class="muted">log: <code>${d.log_file || ""}</code></div>
-      <div class="muted">cmd: <code>${(d.command || "").slice(0, 220)}</code></div>
-    `;
+    const row = _el("div", { className: "row" });
+    row.appendChild(_el("strong", {}, d.widget_id || "daemon"));
+    row.appendChild(_el("span", { className: "muted" }, `pid=${pid}`));
+    node.appendChild(row);
+
+    const cwd = _el("div", { className: "muted" });
+    cwd.appendChild(document.createTextNode("cwd: "));
+    cwd.appendChild(_el("code", {}, d.cwd || ""));
+    node.appendChild(cwd);
+
+    const log = _el("div", { className: "muted" });
+    log.appendChild(document.createTextNode("log: "));
+    log.appendChild(_el("code", {}, d.log_file || ""));
+    node.appendChild(log);
+
+    const cmd = _el("div", { className: "muted" });
+    cmd.appendChild(document.createTextNode("cmd: "));
+    cmd.appendChild(_el("code", {}, String(d.command || "").slice(0, 220)));
+    node.appendChild(cmd);
     node.addEventListener("click", () => {
       daemonPidInput.value = String(pid);
       daemonLogOutput.hidden = true;
