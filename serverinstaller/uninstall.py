@@ -190,11 +190,47 @@ def _looks_like_suite_server(name: str, server_def: object) -> bool:
     except Exception:
         return False
 
-def _detach_suite_from_client_config(path: Path, *, verbose: bool = False, devlog: Optional[Path] = None) -> int:
+def _looks_like_managed_server(name: str, server_def: object) -> bool:
+    """Servers typically created/managed under ~/.mcp-tools/servers/*."""
+    try:
+        cmd = ""
+        if isinstance(server_def, dict):
+            cmd = str(server_def.get("command") or "")
+        cmd_l = cmd.lower()
+        return ("/.mcp-tools/servers/" in cmd_l) or ("\\.mcp-tools\\servers\\" in cmd_l) or ("/mcp-tools/servers/" in cmd_l)
+    except Exception:
+        return False
+
+def _looks_like_suite_tool(name: str, server_def: object) -> bool:
+    """Core suite tools (nexus-*) and commands pointing to ~/.mcp-tools/bin."""
+    try:
+        n = (name or "").lower()
+        if n.startswith("nexus-"):
+            return True
+        cmd = ""
+        if isinstance(server_def, dict):
+            cmd = str(server_def.get("command") or "")
+        cmd_l = cmd.lower()
+        return "/.mcp-tools/bin/" in cmd_l or "\\.mcp-tools\\bin\\" in cmd_l
+    except Exception:
+        return False
+
+def _detach_suite_from_client_config(
+    path: Path,
+    *,
+    verbose: bool = False,
+    devlog: Optional[Path] = None,
+    detach_suite: bool = True,
+    detach_managed: bool = False,
+    detach_suite_tools: bool = False,
+) -> int:
     """
     Remove suite-installed servers from a client config JSON file.
 
-    Heuristic: remove servers whose command points into ~/.mcp-tools OR whose name starts with nexus-.
+    Heuristics:
+    - detach_suite: historical behavior (broad) — remove servers whose command points into ~/.mcp-tools OR name starts with nexus-
+    - detach_managed: remove servers that point into ~/.mcp-tools/servers/*
+    - detach_suite_tools: remove core suite tools (nexus-* / ~/.mcp-tools/bin/*)
     """
     try:
         if not path.exists() or not path.is_file():
@@ -207,10 +243,20 @@ def _detach_suite_from_client_config(path: Path, *, verbose: bool = False, devlo
         removed = 0
 
         # Common shapes: {mcpServers: {...}} or {mcp_servers: {...}}.
+        def _should_remove(k: str, v: object) -> bool:
+            if detach_suite:
+                return _looks_like_suite_server(k, v)
+            remove = False
+            if detach_managed:
+                remove = remove or _looks_like_managed_server(k, v)
+            if detach_suite_tools:
+                remove = remove or _looks_like_suite_tool(k, v)
+            return remove
+
         for key in ("mcpServers", "mcp_servers", "servers"):
             block = data.get(key)
             if isinstance(block, dict):
-                doomed = [k for k, v in block.items() if _looks_like_suite_server(k, v)]
+                doomed = [k for k, v in block.items() if _should_remove(k, v)]
                 for k in doomed:
                     try:
                         del block[k]
@@ -248,6 +294,7 @@ class NexusUninstaller:
         project_root: Path,
         kill_venv: bool = False,
         purge_data: bool = False,
+        purge_env: bool = False,
         verbose: bool = False,
         devlog: Optional[Path] = None,
         yes: bool = False,
@@ -256,6 +303,7 @@ class NexusUninstaller:
         self.project_root = project_root
         self.kill_venv = kill_venv
         self.purge_data = purge_data
+        self.purge_env = purge_env
         self.verbose = verbose
         self.devlog = devlog
         self.yes = yes
@@ -272,6 +320,8 @@ class NexusUninstaller:
         # and we do NOT attempt to clean workspace artifacts automatically.
         if self.purge_data:
             return self.run_central_only()
+        if self.purge_env:
+            return self.run_central_env_only()
 
         if not self.manifest_path.exists():
             print(f"[warn] No installation manifest found at {self.manifest_path}.")
@@ -397,7 +447,12 @@ class NexusUninstaller:
         if getattr(self, "detach_clients", False):
             removed_total = 0
             for _, cfg in _client_config_paths():
-                removed_total += _detach_suite_from_client_config(cfg, verbose=self.verbose, devlog=self.devlog)
+                removed_total += _detach_suite_from_client_config(
+                    cfg,
+                    verbose=self.verbose,
+                    devlog=self.devlog,
+                    detach_suite=True,
+                )
             if self.verbose:
                 print(f"[-] Detached suite servers from clients: removed={removed_total}")
 
@@ -509,6 +564,84 @@ class NexusUninstaller:
         self.log("Uninstall complete (central-only).")
         return 0
 
+    def run_central_env_only(self):
+        """
+        Purge only environments (rebuildable), keeping suite binaries and data in ~/.mcp-tools.
+        Safe default for most “it’s broken” cases.
+        """
+        nexus = get_mcp_tools_home()
+        targets: List[tuple[str, Path, str]] = []
+
+        if getattr(self, "detach_managed_servers", False) or getattr(self, "detach_suite_tools", False):
+            removed_total = 0
+            for _, cfg in _client_config_paths():
+                removed_total += _detach_suite_from_client_config(
+                    cfg,
+                    verbose=self.verbose,
+                    devlog=self.devlog,
+                    detach_suite=False,
+                    detach_managed=bool(getattr(self, "detach_managed_servers", False)),
+                    detach_suite_tools=bool(getattr(self, "detach_suite_tools", False)),
+                )
+            if self.verbose:
+                print(f"[-] Detached servers from clients: removed={removed_total}")
+
+        if nexus.exists():
+            venv = nexus / ".venv"
+            if venv.exists():
+                targets.append(("dir", venv, "central env (~/.mcp-tools/.venv)"))
+
+            servers_dir = nexus / "servers"
+            if servers_dir.exists() and servers_dir.is_dir():
+                for srv in sorted(servers_dir.iterdir(), key=lambda p: p.name):
+                    v = srv / ".venv"
+                    if v.exists():
+                        targets.append(("dir", v, "server env (servers/*/.venv)"))
+
+        print("\nNexus Uninstall (Env-Only)")
+        print("=" * 60)
+        if targets:
+            print("Planned removals:")
+            for kind, path, reason in targets:
+                print(f"- {kind:3} {path}  ({reason})")
+        else:
+            print("Nothing found to remove in approved locations.")
+
+        if targets:
+            print()
+            print("[info] This keeps suite binaries and data; only environments are removed.")
+            if not self.yes and not _confirm("Proceed with deleting the above items?"):
+                self.log("User aborted uninstall.")
+                if self.devlog:
+                    _write_devlog(self.devlog, "aborted", {"targets": [str(p) for _, p, _ in targets]})
+                return 2
+
+        if self.dry_run:
+            self.log("Dry-run enabled; no changes were made.")
+            if self.devlog:
+                _write_devlog(self.devlog, "dry_run", {"targets": [str(p) for _, p, _ in targets]})
+            return 0
+
+        for kind, path, reason in targets:
+            try:
+                if path.is_dir():
+                    if self.verbose:
+                        print(f"[-] Removing directory: {path}")
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    if self.verbose:
+                        print(f"[-] Removing file: {path}")
+                    path.unlink(missing_ok=True)
+                if self.devlog:
+                    _write_devlog(self.devlog, "removed", {"path": str(path), "reason": reason})
+            except Exception as e:
+                print(f"[warn] Failed to remove {path}: {e}")
+                if self.devlog:
+                    _write_devlog(self.devlog, "remove_failed", {"path": str(path), "error": str(e), "reason": reason})
+
+        self.log("Uninstall complete (env-only).")
+        return 0
+
     def remove_nexus(self, force: bool = False):
         """Check if we should remove the shared Nexus root (~/.mcp-tools)."""
         nexus = get_mcp_tools_home()
@@ -573,7 +706,10 @@ def main():
     parser = argparse.ArgumentParser(description="Nexus Clean Room Uninstaller")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the virtual environment as well")
     parser.add_argument("--purge-data", action="store_true", help="Remove central suite data (~/.mcp-tools) and observer state (~/.mcpinv)")
+    parser.add_argument("--purge-env", action="store_true", help="Remove only shared environments (keep suite installed)")
     parser.add_argument("--detach-clients", action="store_true", help="Remove suite servers from detected IDE client configs")
+    parser.add_argument("--detach-managed-servers", action="store_true", help="Detach managed servers (e.g., ~/.mcp-tools/servers/*) from clients")
+    parser.add_argument("--detach-suite-tools", action="store_true", help="Detach suite tools (nexus-*) from clients")
     parser.add_argument("--remove-path-block", action="store_true", help="Remove PATH injection block from shell rc files")
     parser.add_argument("--remove-wrappers", action="store_true", help="Remove user wrapper scripts (e.g., ~/.local/bin/mcp-*)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
@@ -595,12 +731,15 @@ def main():
         root,
         kill_venv=args.kill_venv,
         purge_data=args.purge_data,
+        purge_env=args.purge_env,
         verbose=args.verbose,
         devlog=devlog_path,
         yes=args.yes,
         dry_run=args.dry_run,
     )
     uninstaller.detach_clients = bool(args.detach_clients)
+    uninstaller.detach_managed_servers = bool(args.detach_managed_servers)
+    uninstaller.detach_suite_tools = bool(args.detach_suite_tools)
     uninstaller.remove_path_block = bool(args.remove_path_block)
     uninstaller.remove_wrappers = bool(args.remove_wrappers)
     rc = uninstaller.run()

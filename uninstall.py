@@ -11,7 +11,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Uninstall MCP Workforce Nexus (repo entrypoint)")
     parser.add_argument("--kill-venv", action="store_true", help="Remove the local .venv (if present)")
     parser.add_argument("--purge-data", action="store_true", help="Purge shared Nexus data (~/.mcp-tools and ~/.mcpinv)")
+    parser.add_argument("--purge-env", action="store_true", help="Purge only shared environments (~/.mcp-tools/.venv and per-server envs)")
     parser.add_argument("--detach-clients", action="store_true", help="Remove Nexus suite servers from detected IDE clients")
+    parser.add_argument("--detach-managed-servers", action="store_true", help="Detach managed servers (e.g., ~/.mcp-tools/servers/*) from clients")
+    parser.add_argument("--detach-suite-tools", action="store_true", help="Detach suite tools (nexus-*) from clients")
     parser.add_argument("--remove-path-block", action="store_true", help="Remove PATH injection block from shell rc files")
     parser.add_argument("--remove-wrappers", action="store_true", help="Remove user wrapper scripts (e.g., ~/.local/bin/mcp-*)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -26,8 +29,14 @@ def main() -> int:
         forwarded.append("--kill-venv")
     if ns.purge_data:
         forwarded.append("--purge-data")
+    if ns.purge_env:
+        forwarded.append("--purge-env")
     if ns.detach_clients:
         forwarded.append("--detach-clients")
+    if ns.detach_managed_servers:
+        forwarded.append("--detach-managed-servers")
+    if ns.detach_suite_tools:
+        forwarded.append("--detach-suite-tools")
     if ns.remove_path_block:
         forwarded.append("--remove-path-block")
     if ns.remove_wrappers:
