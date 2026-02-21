@@ -52,11 +52,57 @@ class TestCentralOnlyUninstall(unittest.TestCase):
             nexus = home / ".mcp-tools"
             (nexus / ".venv").mkdir(parents=True, exist_ok=True)
             (home / ".mcpinv").mkdir(parents=True, exist_ok=True)
+            (home / "Desktop").mkdir(parents=True, exist_ok=True)
 
             res = run_cmd("--purge-data", "--kill-venv", "--yes", env=env)
             self.assertEqual(res.returncode, 0, res.stderr + "\n" + res.stdout)
             self.assertFalse(nexus.exists())
             self.assertFalse((home / ".mcpinv").exists())
+            # Full wipe leaves behind a purge checklist on Desktop.
+            checklists = list((home / "Desktop").glob("Nexus Purge Checklist *.md"))
+            self.assertTrue(checklists)
+
+    def test_kill_venv_also_removes_desktop_launcher_and_stale_aliases(self):
+        with TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["SHELL"] = "/bin/zsh"
+
+            nexus = home / ".mcp-tools"
+            (nexus / ".venv").mkdir(parents=True, exist_ok=True)
+            (home / ".mcpinv").mkdir(parents=True, exist_ok=True)
+
+            # Desktop launcher created by setup.sh
+            desktop = home / "Desktop"
+            desktop.mkdir(parents=True, exist_ok=True)
+            launcher = desktop / "Start Nexus.command"
+            launcher.write_text("#!/bin/bash\necho hi\n", encoding="utf-8")
+
+            # Legacy aliases (no markers) pointing at missing files should be removed.
+            zshrc = home / ".zshrc"
+            zshrc.write_text(
+                "\n".join(
+                    [
+                        "export FOO=bar",
+                        "alias nx='python3 /missing/nexus-verify.py'",
+                        "alias nexus='/missing/nexus.sh'",
+                        "export BAR=baz",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            res = run_cmd("--purge-data", "--kill-venv", "--yes", env=env)
+            self.assertEqual(res.returncode, 0, res.stderr + "\n" + res.stdout)
+
+            self.assertFalse(launcher.exists())
+            content = zshrc.read_text(encoding="utf-8")
+            self.assertIn("export FOO=bar", content)
+            self.assertIn("export BAR=baz", content)
+            self.assertNotIn("alias nx=", content)
+            self.assertNotIn("alias nexus=", content)
 
     def test_devlog_survives_purge(self):
         with TemporaryDirectory() as tmp:

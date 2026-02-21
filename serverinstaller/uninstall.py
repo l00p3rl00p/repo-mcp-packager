@@ -4,6 +4,7 @@ import json
 import argparse
 import sys
 import datetime
+import time
 from pathlib import Path
 from typing import List
 from typing import Optional
@@ -150,6 +151,258 @@ def _remove_user_wrappers(verbose: bool = False, devlog: Optional[Path] = None) 
                 _write_devlog(devlog, "user_wrapper_removed", {"path": str(p)})
         except Exception:
             continue
+
+def _remove_desktop_launchers(verbose: bool = False, devlog: Optional[Path] = None) -> None:
+    """
+    Remove Desktop launchers created by setup.sh (macOS .command / Windows .bat).
+    This is intentionally scoped to known filenames; no directory scans.
+    """
+    try:
+        home = _home()
+        desktop = home / "Desktop"
+        if not desktop.exists():
+            return
+        targets = [
+            desktop / "Start Nexus.command",
+            desktop / "Start Nexus.bat",
+        ]
+        for p in targets:
+            try:
+                if not p.exists():
+                    continue
+                p.unlink(missing_ok=True)
+                if verbose:
+                    print(f"[-] Removed Desktop launcher: {p}")
+                if devlog:
+                    _write_devlog(devlog, "desktop_launcher_removed", {"path": str(p)})
+            except Exception:
+                continue
+    except Exception:
+        return
+
+def _remove_shell_aliases(verbose: bool = False, devlog: Optional[Path] = None) -> None:
+    """
+    Best-effort removal of legacy alias lines added by setup.sh (no markers).
+    Conservatively removes only aliases that point at missing files.
+    """
+    try:
+        home = _home()
+        candidates: list[Path] = []
+        shell = os.environ.get("SHELL", "")
+        if "zsh" in shell:
+            candidates.append(home / ".zshrc")
+        if "bash" in shell:
+            candidates.append(home / ".bash_profile")
+            candidates.append(home / ".bashrc")
+        candidates.extend([home / ".zshrc", home / ".bash_profile", home / ".bashrc"])
+
+        seen: set[Path] = set()
+        for rc in candidates:
+            if rc in seen:
+                continue
+            seen.add(rc)
+            if not rc.exists() or not rc.is_file():
+                continue
+            try:
+                raw_lines = rc.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except Exception:
+                continue
+
+            removed = 0
+            kept: list[str] = []
+            for line in raw_lines:
+                s = line.strip()
+                if not s.startswith("alias "):
+                    kept.append(line)
+                    continue
+                if ("nexus-verify.py" not in s) and ("/nexus.sh" not in s):
+                    kept.append(line)
+                    continue
+                # Heuristic: extract the first quoted path and remove the alias only if that path no longer exists.
+                # Example lines:
+                #   alias nx='python3 /abs/path/nexus-verify.py'
+                #   alias nexus='/abs/path/nexus.sh'
+                target_path = None
+                for token in ("nexus-verify.py", "/nexus.sh"):
+                    idx = s.find(token)
+                    if idx == -1:
+                        continue
+                    # Walk backwards to find a plausible path boundary
+                    start = s.rfind(" ", 0, idx)
+                    if start == -1:
+                        start = s.rfind("'", 0, idx)
+                    if start == -1:
+                        start = 0
+                    candidate = s[start: idx + len(token)].strip(" '\"")
+                    if candidate:
+                        target_path = candidate
+                        break
+                if target_path:
+                    try:
+                        if not Path(target_path).expanduser().exists():
+                            removed += 1
+                            continue
+                    except Exception:
+                        pass
+                kept.append(line)
+
+            if removed <= 0:
+                continue
+
+            stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            backup = rc.with_suffix(rc.suffix + f".backup.{stamp}")
+            try:
+                backup.write_text("\n".join(raw_lines) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+            try:
+                rc.write_text("\n".join(kept) + "\n", encoding="utf-8")
+                if verbose:
+                    print(f"[-] Removed {removed} alias line(s) from {rc} (backup: {backup})")
+                if devlog:
+                    _write_devlog(devlog, "shell_aliases_removed", {"file": str(rc), "removed": removed, "backup": str(backup)})
+            except Exception:
+                continue
+    except Exception:
+        return
+
+def _terminate_nexus_processes(verbose: bool = False, devlog: Optional[Path] = None) -> None:
+    """
+    Best-effort: terminate running Nexus-related processes so a wipe is actually pristine.
+    This is intentionally conservative and avoids broad "kill python" behavior.
+    """
+    try:
+        # First, try PID files written by launchers/tray. This avoids any need for
+        # process enumeration (ps/psutil) and is the most reliable cross-env signal.
+        try:
+            pid_paths = [
+                _home() / ".mcpinv" / "nexus.pid",
+            ]
+            for pid_path in pid_paths:
+                try:
+                    if not pid_path.exists():
+                        continue
+                    raw = pid_path.read_text(encoding="utf-8", errors="ignore").strip()
+                    pid = int(raw) if raw.isdigit() else None
+                    if not pid or pid == os.getpid():
+                        continue
+                    try:
+                        os.kill(pid, 15)  # SIGTERM
+                        time.sleep(0.3)
+                        os.kill(pid, 9)  # SIGKILL (if still alive)
+                    except Exception:
+                        pass
+                    try:
+                        pid_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    if verbose:
+                        print(f"[-] Terminated Nexus PID from pidfile: {pid} ({pid_path})")
+                    if devlog:
+                        _write_devlog(devlog, "process_terminated_pidfile", {"pid": pid, "pidfile": str(pid_path)})
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        patterns = (
+            "nexus_tray.py",
+            "gui_bridge.py",
+            "mcp_inventory",
+            "mcp_injector.py",
+            "repo-mcp-packager",
+            ".mcp-tools",
+        )
+        me = os.getpid()
+        killed: list[dict] = []
+
+        try:
+            import psutil  # type: ignore
+        except Exception:
+            psutil = None  # type: ignore
+
+        if psutil is None:
+            return
+
+        for proc in psutil.process_iter(attrs=["pid", "name", "cmdline"]):
+            try:
+                pid = int(proc.info.get("pid") or 0)
+                if not pid or pid == me:
+                    continue
+                cmdline = proc.info.get("cmdline") or []
+                cmd = " ".join(str(x) for x in cmdline)
+                if not cmd:
+                    continue
+                cmd_l = cmd.lower()
+                if not any(p.lower() in cmd_l for p in patterns):
+                    continue
+                # Avoid killing unrelated processes that just happen to mention "mcp"
+                if ("nexus_tray.py" not in cmd_l) and (".mcp-tools" not in cmd_l) and ("repo-mcp-packager" not in cmd_l):
+                    continue
+                proc.terminate()
+                killed.append({"pid": pid, "cmd": cmd[:240]})
+            except Exception:
+                continue
+
+        # Give graceful terminate a moment, then hard kill any survivors we targeted.
+        try:
+            psutil.wait_procs([psutil.Process(k["pid"]) for k in killed], timeout=2)  # type: ignore[arg-type]
+        except Exception:
+            pass
+        for k in killed:
+            try:
+                p = psutil.Process(k["pid"])
+                if p.is_running():
+                    p.kill()
+            except Exception:
+                continue
+
+        if killed and verbose:
+            print(f"[-] Terminated Nexus-related processes: {len(killed)}")
+        if devlog and killed:
+            _write_devlog(devlog, "processes_terminated", {"count": len(killed), "procs": killed})
+    except Exception:
+        return
+
+def _purge_checklist_path() -> Optional[Path]:
+    """
+    Location for a human-facing purge checklist that survives a full wipe.
+    Prefer Desktop so it doesn't interfere with a new install and is easy to find.
+    """
+    try:
+        home = _home()
+        desktop = home / "Desktop"
+        base = desktop if desktop.exists() else home
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        return base / f"Nexus Purge Checklist {stamp}.md"
+    except Exception:
+        return None
+
+def _write_purge_checklist(path: Path, sections: list[tuple[str, list[str]]]) -> None:
+    try:
+        lines: list[str] = []
+        lines.append("# Nexus Purge Checklist")
+        lines.append("")
+        lines.append(f"- Timestamp: {datetime.datetime.now().isoformat(timespec='seconds')}")
+        lines.append(f"- Platform: {sys.platform}")
+        lines.append("")
+        for title, items in sections:
+            lines.append(f"## {title}")
+            lines.append("")
+            if not items:
+                lines.append("- (none)")
+                lines.append("")
+                continue
+            for it in items:
+                lines.append(f"- {it}")
+            lines.append("")
+        lines.append("## Next steps")
+        lines.append("")
+        lines.append("- Reinstall: run `./nexus.sh` from a fresh workspace clone, or re-run your installer.")
+        lines.append("")
+        path.write_text("\n".join(lines), encoding="utf-8")
+    except Exception:
+        return
 
 def _client_config_paths() -> list[tuple[str, Path]]:
     """
@@ -439,6 +692,14 @@ class NexusUninstaller:
         mcpinv = _home() / ".mcpinv"
 
         targets: List[tuple[str, Path, str]] = []
+        checklist = _purge_checklist_path() if self.kill_venv else None
+        actions: list[str] = []
+
+        # If we are doing a true wipe, stop the running tray/bridge first; a deleted folder
+        # doesn't stop a backgrounded Python process.
+        if self.kill_venv:
+            _terminate_nexus_processes(verbose=self.verbose, devlog=self.devlog)
+            actions.append("Attempted to terminate running Nexus processes (best-effort).")
 
         # Central suite cleanup:
         # - If --kill-venv is set: delete ~/.mcp-tools entirely (includes .venv)
@@ -455,11 +716,22 @@ class NexusUninstaller:
                 )
             if self.verbose:
                 print(f"[-] Detached suite servers from clients: removed={removed_total}")
+            actions.append(f"Detached suite servers from IDE client configs: removed={removed_total}")
 
         if getattr(self, "remove_path_block", False):
             _remove_path_block(verbose=self.verbose, devlog=self.devlog)
+            actions.append("Removed PATH injection block markers (best-effort).")
         if getattr(self, "remove_wrappers", False):
             _remove_user_wrappers(verbose=self.verbose, devlog=self.devlog)
+            actions.append("Removed user wrapper scripts in ~/.local/bin (best-effort).")
+
+        # Remove Desktop launchers so a "wipe" doesn't leave a working entrypoint behind.
+        if self.kill_venv:
+            _remove_desktop_launchers(verbose=self.verbose, devlog=self.devlog)
+            actions.append("Removed Desktop launchers: Start Nexus.command / Start Nexus.bat (best-effort).")
+            # Legacy aliases are unmarked; remove only the ones pointing at missing files.
+            _remove_shell_aliases(verbose=self.verbose, devlog=self.devlog)
+            actions.append("Removed legacy shell aliases pointing at missing Nexus files (best-effort).")
 
         if nexus.exists():
             venv = nexus / ".venv"
@@ -510,6 +782,9 @@ class NexusUninstaller:
         print("\nWorkspace cleanup (manual):")
         print("- If you created local venvs in your repo folders, delete them yourself, e.g.:")
         print("  - From each repo root: rm -rf .venv __pycache__ .pytest_cache")
+        if checklist:
+            print("\nPurge checklist:")
+            print(f"- Will be written to: {checklist}")
 
         # Confirmation rules:
         # - --purge-data always requires confirmation
@@ -560,6 +835,18 @@ class NexusUninstaller:
                 print(f"[warn] Failed to remove {path}: {e}")
                 if self.devlog:
                     _write_devlog(self.devlog, "remove_failed", {"path": str(path), "error": str(e), "reason": reason})
+
+        if checklist:
+            _write_purge_checklist(
+                checklist,
+                [
+                    ("Actions performed", actions + [f"Checklist written to: {checklist}"]),
+                    ("Planned removals (targets)", [f"{k} {p} ({r})" for (k, p, r) in deduped]),
+                    ("Notes", ["Uninstaller operates only in approved locations (no disk scan)."]),
+                ],
+            )
+            if self.verbose:
+                print(f"[-] Wrote purge checklist: {checklist}")
 
         self.log("Uninstall complete (central-only).")
         return 0
@@ -712,6 +999,7 @@ def main():
     parser.add_argument("--detach-suite-tools", action="store_true", help="Detach suite tools (nexus-*) from clients")
     parser.add_argument("--remove-path-block", action="store_true", help="Remove PATH injection block from shell rc files")
     parser.add_argument("--remove-wrappers", action="store_true", help="Remove user wrapper scripts (e.g., ~/.local/bin/mcp-*)")
+    # NOTE: Desktop launchers + legacy aliases are removed automatically on --kill-venv full wipe.
     parser.add_argument("--verbose", action="store_true", help="Verbose output (print every decision + removal)")
     parser.add_argument("--devlog", action="store_true", help="Write a dev log (JSONL) with 90-day retention")
     parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts (DANGEROUS)")
