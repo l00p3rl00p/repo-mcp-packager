@@ -907,22 +907,28 @@ requires-python = ">=3.6"
                 print(" (Enter 'q' at any prompt to abort)")
                 print("-" * 40)
                 
-                if discovery["python_project"]:
-                    choice = input("Install Python Server/CLI? [Y/n/q]: ").strip().lower()
+                try:
+                    if discovery["python_project"]:
+                        # UX clarity: this installs into the Nexus environment (typically ~/.mcp-tools/.venv),
+                        # not the user's system/global Python.
+                        choice = input("Install Python Server/CLI into the Nexus environment (~/.mcp-tools/.venv)? [Y/n/q]: ").strip().lower()
+                        if choice == 'q':
+                            sys.exit(0)
+                        install_choices["python"] = choice != 'n'
+                
+                    if discovery["gui_project"]:
+                        choice = input("Install GUI Frontend (build + assets)? [Y/n/q]: ").strip().lower()
+                        if choice == 'q':
+                            sys.exit(0)
+                        install_choices["gui"] = choice != 'n'
+                
+                    choice = input("Install Knowledge Base (Librarian)? [Y/n/q]: ").strip().lower()
                     if choice == 'q':
                         sys.exit(0)
-                    install_choices["python"] = choice != 'n'
-                
-                if discovery["gui_project"]:
-                    choice = input("Install GUI Frontend? [Y/n/q]: ").strip().lower()
-                    if choice == 'q':
-                        sys.exit(0)
-                    install_choices["gui"] = choice != 'n'
-                
-                choice = input("Install Knowledge Base (Librarian)? [Y/n/q]: ").strip().lower()
-                if choice == 'q':
-                    sys.exit(0)
-                install_choices["knowledge_base"] = choice != 'n'
+                    install_choices["knowledge_base"] = choice != 'n'
+                except KeyboardInterrupt:
+                    print("\n\nAborted by user (no global Python changes were made).")
+                    raise SystemExit(130)
 
                 if not any(install_choices.values()):
                     print("\nNo components selected for installation.")
