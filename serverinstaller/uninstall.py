@@ -277,13 +277,23 @@ def _terminate_nexus_processes(verbose: bool = False, devlog: Optional[Path] = N
         try:
             pid_paths = [
                 _home() / ".mcpinv" / "nexus.pid",
+                _home() / ".mcpinv" / "nexus.pid.json",
             ]
             for pid_path in pid_paths:
                 try:
                     if not pid_path.exists():
                         continue
                     raw = pid_path.read_text(encoding="utf-8", errors="ignore").strip()
-                    pid = int(raw) if raw.isdigit() else None
+                    pid: Optional[int] = None
+                    if pid_path.suffix == ".json":
+                        try:
+                            obj = json.loads(raw) if raw else {}
+                            pid = int(obj.get("pid") or 0) or None
+                        except Exception:
+                            pid = None
+                    else:
+                        pid = int(raw) if raw.isdigit() else None
+
                     if not pid or pid == os.getpid():
                         continue
                     try:
@@ -413,19 +423,45 @@ def _client_config_paths() -> list[tuple[str, Path]]:
     home = _home()
     out: list[tuple[str, Path]] = []
     if sys.platform == "darwin":
+        # Keep this list in sync with mcp-injector/mcp_injector.py::_client_specs() (but do not import it here).
         out.append(("claude", home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"))
+        out.append(("claude", home / ".config" / "Claude" / "claude_desktop_config.json"))
         out.append(("codex", home / "Library" / "Application Support" / "Codex" / "mcp_servers.json"))
+        out.append(("cursor", home / ".cursor" / "mcp.json"))
+        out.append(("cursor", home / "Library" / "Application Support" / "Cursor" / "mcp.json"))
+        out.append(("vscode", home / ".vscode" / "mcp_settings.json"))
+        out.append(("vscode", home / "Library" / "Application Support" / "Code" / "User" / "mcp_settings.json"))
+        out.append(("codex", home / "Library" / "Application Support" / "Codex" / "mcp_servers.json"))
+        out.append(("codex", home / ".config" / "codex" / "mcp_servers.json"))
+        out.append(("codex", home / ".config" / "Codex" / "mcp_servers.json"))  # case-variant
         out.append(("xcode", home / "Library" / "Developer" / "Xcode" / "UserData" / "MCPServers" / "config.json"))
+        out.append(("aistudio", home / ".config" / "aistudio" / "mcp_servers.json"))
+        out.append(("aistudio", home / "Library" / "Application Support" / "Google" / "AIStudio" / "mcp_servers.json"))
+        # Google AI Antigravity / Gemini Antigravity (user-observed paths)
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp_server.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp" / "mcp_config.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp_config.json"))
     elif sys.platform == "win32":
         appdata = Path(os.environ.get("APPDATA", str(home)))
         localapp = Path(os.environ.get("LOCALAPPDATA", str(home)))
         out.append(("claude", appdata / "Claude" / "claude_desktop_config.json"))
         out.append(("codex", appdata / "Codex" / "mcp_servers.json"))
+        out.append(("cursor", appdata / "Cursor" / "mcp.json"))
+        out.append(("vscode", appdata / "Code" / "User" / "mcp_settings.json"))
+        out.append(("aistudio", appdata / "Google" / "AIStudio" / "mcp_servers.json"))
         out.append(("xcode", localapp / "Xcode" / "MCPServers" / "config.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp" / "mcp_config.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp_config.json"))
     else:
         # Linux: best-effort locations (may vary by packaging).
         out.append(("claude", home / ".config" / "Claude" / "claude_desktop_config.json"))
         out.append(("codex", home / ".config" / "Codex" / "mcp_servers.json"))
+        out.append(("codex", home / ".config" / "codex" / "mcp_servers.json"))
+        out.append(("cursor", home / ".cursor" / "mcp.json"))
+        out.append(("vscode", home / ".vscode" / "mcp_settings.json"))
+        out.append(("aistudio", home / ".config" / "aistudio" / "mcp_servers.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp" / "mcp_config.json"))
+        out.append(("antigravity", home / ".gemini" / "antigravity" / "mcp_config.json"))
     return out
 
 def _looks_like_suite_server(name: str, server_def: object) -> bool:
@@ -561,7 +597,8 @@ class NexusUninstaller:
         self.devlog = devlog
         self.yes = yes
         self.dry_run = dry_run
-        self.manifest_path = self.project_root / ".librarian" / "manifest.json"
+        # Rule of One: suite receipts are always central (no per-repo manifests).
+        self.manifest_path = get_mcp_tools_home() / ".nexus" / "manifest.json"
 
     def log(self, msg: str):
         print(f"[-] {msg}")
@@ -577,8 +614,9 @@ class NexusUninstaller:
             return self.run_central_env_only()
 
         if not self.manifest_path.exists():
-            print(f"[warn] No installation manifest found at {self.manifest_path}.")
-            print("   Proceeding with directory clean-up mode (fallback).")
+            print(f"[warn] No suite manifest found at {self.manifest_path}.")
+            print("   This usually means the suite install/repair did not complete or receipts were deleted.")
+            print("   Next action: run the installer/repair to regenerate receipts, then re-run uninstall.")
             manifest = {}
         else:
             try:
@@ -664,11 +702,8 @@ class NexusUninstaller:
                 self.log(f"Removing file: {path}")
                 path.unlink(missing_ok=True)
 
-        # 2. Cleanup manifest directory (if it exists)
-        manifest_dir = self.manifest_path.parent
-        if manifest_dir.exists():
-            self.log(f"Removing manifest directory: {manifest_dir}")
-            shutil.rmtree(manifest_dir, ignore_errors=True)
+        # 2. Do not delete the central receipt directory automatically here.
+        # Central purge paths are handled by run_central_only/run_central_env_only.
 
         # 3. Handle Venv
         if self.kill_venv:
@@ -732,6 +767,10 @@ class NexusUninstaller:
             # Legacy aliases are unmarked; remove only the ones pointing at missing files.
             _remove_shell_aliases(verbose=self.verbose, devlog=self.devlog)
             actions.append("Removed legacy shell aliases pointing at missing Nexus files (best-effort).")
+            # Remove central suite receipt so a wipe leaves no Nexus-owned artifacts behind.
+            receipt_dir = nexus / ".nexus"
+            if receipt_dir.exists():
+                targets.append(("dir", receipt_dir, "suite receipts (~/.mcp-tools/.nexus)"))
 
         if nexus.exists():
             venv = nexus / ".venv"

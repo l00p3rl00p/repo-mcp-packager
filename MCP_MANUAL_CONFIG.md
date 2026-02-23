@@ -283,6 +283,23 @@ Behavior:
 * If the full Nexus package is detected (`~/.mcp-tools/bin`), it offers injection only for **MCP-server** components (currently `nexus-librarian`). Other Nexus binaries like `mcp-activator` are CLIs and should not be injected into MCP clients.
 * For each component, injection is explicit: **inject now** or **skip now**.
 
+### Permanent Path Overrides (No Friction)
+
+If your MCP client stores its config in a non-standard location, set a permanent override once so install/uninstall/inject flows remain deterministic (no disk scans, no manual edits).
+
+- File: `~/.mcp-tools/config.json`
+- Key: `ide_config_paths`
+- Example:
+  ```json
+  {
+    "ide_config_paths": {
+      "google-antigravity": "/Users/YOU/.gemini/antigravity/mcp_config.json"
+    }
+  }
+  ```
+
+Note: some Gemini Antigravity configs may be stored as markdown-fenced JSON (` ```json ... ``` `). That is a supported file-format variant.
+
 ---
 
 ## Web Clients (Recommended Pattern)

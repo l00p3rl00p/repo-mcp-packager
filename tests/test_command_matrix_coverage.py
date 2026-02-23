@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-COMMANDS_MD = REPO_ROOT / "COMMANDS.md"
+COMMANDS_MD = REPO_ROOT / "commands.md"
 WIDGETS_JSON = REPO_ROOT / "gui" / "widgets.json"
 
 
@@ -11,7 +11,7 @@ class CommandMatrixCoverageTests(unittest.TestCase):
     def test_every_documented_command_has_widget(self):
         import json
 
-        # COMMANDS.md tables may evolve; we count the number of documented *direct commands*
+        # commands.md tables may evolve; we count the number of documented *direct commands*
         # (backticked) and require GUI widgets to cover them.
         expected_commands = []
         for line in COMMANDS_MD.read_text(encoding="utf-8").splitlines():
@@ -30,7 +30,7 @@ class CommandMatrixCoverageTests(unittest.TestCase):
         # CLI-only administrative commands are not expected to be exposed as GUI widgets.
         expected_gui_commands = [
             cmd for cmd in expected_commands
-            if "uninstall.py" not in cmd and " --server" not in cmd
+            if "uninstall.py" not in cmd and " --server" not in cmd and "nexus.sh" not in cmd and "nexus.bat" not in cmd
         ]
         missing = [cmd for cmd in expected_gui_commands if cmd not in templates]
         self.assertEqual(missing, [], f"Missing widget templates for commands: {missing}")

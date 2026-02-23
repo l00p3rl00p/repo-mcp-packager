@@ -382,7 +382,15 @@ class NexusInstaller:
             sys.exit(1)
 
     def write_manifest(self, audit: Dict[str, Any]):
-        manifest_dir = self.project_root / ".librarian"
+        """
+        Write the *suite* receipt centrally (Rule of One).
+
+        Manifest location is always under the shared install root so uninstall can be
+        checklist-driven and consistent across repos:
+          ~/.mcp-tools/.nexus/manifest.json
+        """
+        nexus_home = Path.home() / ".mcp-tools" if sys.platform != "win32" else Path(os.environ["USERPROFILE"]) / ".mcp-tools"
+        manifest_dir = nexus_home / ".nexus"
         manifest_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = manifest_dir / "manifest.json"
         
@@ -396,7 +404,8 @@ class NexusInstaller:
         except:
             pass
 
-        manifest_data = {
+        manifest_data: Dict[str, Any] = {
+            "type": "nexus-suite-manifest",
             "install_date": audit["timestamp"],
             "install_artifacts": [str(p) for p in self.artifacts],
             "install_mode": "managed" if self.args.managed else "dev",
@@ -408,6 +417,18 @@ class NexusInstaller:
         # Add MCP attachments if any
         if hasattr(self, 'mcp_attachments') and self.mcp_attachments:
             manifest_data["attached_clients"] = self.mcp_attachments
+
+        # Merge-with-existing (append-only mindset): keep prior receipts, update timestamp + artifacts.
+        try:
+            if manifest_path.exists():
+                existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    # Preserve any owned_surfaces / repos blocks if present (written by bootstrap.py).
+                    for k in ("owned_surfaces", "repos", "logs_root", "wrappers", "notes"):
+                        if k in existing and k not in manifest_data:
+                            manifest_data[k] = existing[k]
+        except Exception:
+            pass
 
         _atomic_write_json(manifest_path, manifest_data)
         

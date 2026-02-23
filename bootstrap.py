@@ -1,7 +1,7 @@
 import os, sys, shutil, platform, argparse, hashlib, subprocess, json
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Any, Dict, List
 
 from nexus_devlog import prune_devlogs, devlog_path, log_event, run_capture
 
@@ -28,6 +28,7 @@ NEXUS_REPOS = {
 INSTALLED_ARTIFACTS = []
 
 STATE_FILENAME = ".nexus_state.json"
+SUITE_MANIFEST_PATH = Path(".nexus") / "manifest.json"
 
 class _InstallState(TypedDict, total=False):
     installed: bool
@@ -74,6 +75,77 @@ def save_install_state(central: Path, *, installed: bool, tier: Optional[str], l
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     except Exception as e:
         print(f"⚠️  Failed to write install state: {e}")
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+def suite_manifest_path(central: Path) -> Path:
+    return central / SUITE_MANIFEST_PATH
+
+def _git_rev(repo_dir: Path) -> Optional[str]:
+    try:
+        if not (repo_dir / ".git").exists():
+            return None
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_dir, text=True).strip()
+    except Exception:
+        return None
+
+def write_suite_manifest(*, central: Path, tier: str, action: str, workspace: Optional[Path]) -> None:
+    """
+    Write a suite-level install manifest/receipt under the central install root (~/.mcp-tools).
+
+    Design intent:
+    - Every repo installs to the same place.
+    - Logs/receipts should be centralized.
+    - Uninstall/purge can be checklist-driven using owned surfaces.
+    """
+    try:
+        manifest = {
+            "type": "nexus-suite-manifest",
+            "version": "1.0",
+            "written_at_utc": _utc_now_iso(),
+            "central_root": str(central),
+            "tier": tier,
+            "action": action,
+            "workspace_source": str(workspace) if workspace else None,
+            "repos": [],
+            "owned_surfaces": [
+                str(central),
+                str(Path.home() / ".mcpinv"),
+                str(Path.home() / "Desktop" / "Start Nexus.command"),
+                str(Path.home() / "Desktop" / "Start Nexus.bat"),
+            ],
+            "logs_root": str(Path.home() / ".mcpinv"),
+            "wrappers": {
+                "central_bin": str(central / "bin"),
+                "user_bin_default": str(_default_user_wrappers_dir() or ""),
+            },
+            "notes": [
+                "This receipt is written by repo-mcp-packager/bootstrap.py.",
+                "Per-repo packager manifests may exist under <project>/.librarian/manifest.json (standalone packaging).",
+            ],
+        }
+
+        repos: List[Dict[str, Any]] = []
+        for name in ("repo-mcp-packager", "mcp-injector", "mcp-server-manager", "mcp-link-library"):
+            repo_dir = central / name
+            repos.append(
+                {
+                    "name": name,
+                    "path": str(repo_dir),
+                    "present": repo_dir.exists(),
+                    "git_rev": _git_rev(repo_dir),
+                }
+            )
+        manifest["repos"] = repos
+
+        _atomic_write_json(suite_manifest_path(central), manifest)
+        print(f"✅ Suite manifest written to {suite_manifest_path(central)}")
+    except Exception as e:
+        print(f"⚠️  Failed to write suite manifest: {e}")
 
 def detect_existing_install(central: Path) -> bool:
     """
@@ -753,8 +825,11 @@ def create_hardened_entry_points(central: Path):
         # Nexus Control Surface (local GUI command runner). Kept as a separate entry point
         # so it remains usable from the central install even if the original workspace is deleted.
         "mcp-nexus-gui": ("repo-mcp-packager", "gui/server.py", False),
-        # Rule of Ones: single front-door launcher (tray + dashboard).
-        "nexus": ("mcp-server-manager", "nexus_tray.py", False),
+        # Rule of Ones: single front-door launcher.
+        # `nexus` with no flags should open the guided CLI walkthrough (anti-lazy menu),
+        # not launch a specific subsystem or print help.
+        # Power users can still pass flags (e.g. --sync, --gui) and the bootstrapper will route them.
+        "nexus": ("repo-mcp-packager", "bootstrap.py", False),
     }
     
     for cmd, (repo, module, use_m) in commands.items():
@@ -1119,6 +1194,7 @@ def main():
             
             print("\n✅ Repair Completed. All entry points and venv refreshed.")
             save_install_state(central, installed=True, tier="industrial", last_action="repair")
+            write_suite_manifest(central=central, tier="industrial", action="repair", workspace=get_workspace_root())
         except Exception as e:
             print(f"❌ Repair failed: {e}")
             sys.exit(1)
@@ -1244,6 +1320,7 @@ def main():
             if tier == 'industrial':
                 print("💡 Try running 'mcp-surgeon --help' in a new terminal.")
             save_install_state(central, installed=True, tier=tier, last_action="install_full")
+            write_suite_manifest(central=central, tier=tier, action="install_full", workspace=workspace)
         elif strategy == 'step':
             if ask("Install to central location?"): 
                 install_to_central(central, workspace, update=args.force)
@@ -1277,6 +1354,7 @@ def main():
                     if ask("Generate Integrity Manifest?"):
                         generate_integrity_manifest(central)
             save_install_state(central, installed=True, tier=tier, last_action="install_step")
+            write_suite_manifest(central=central, tier=tier, action="install_step", workspace=workspace)
     except Exception as e:
         print(f"\n❌ Installation failed: {e}")
         rollback()
