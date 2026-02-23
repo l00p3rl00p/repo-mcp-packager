@@ -71,7 +71,7 @@ The installer understands that **not every directory with code needs to be a ful
 ### The Spectrum of Code
 ```
 Simple Script ─────────── Tool ─────────── Full Product
-mcp_injector.py      Shesha CLI      Shesha RLM (Server + GUI)
+mcp_injector.py      Nexus CLI       Nexus Suite (Server + GUI)
 ```
 
 When you run `python serverinstaller/install.py`, the installer **detects** what kind of repo it's in:

@@ -143,7 +143,7 @@ class NexusInstaller:
         self.log("Running pre-flight checks...")
         try:
             # 1. Permission Check
-            test_file = self.project_root / ".shesha_write_test"
+            test_file = self.project_root / ".nexus_write_test"
             test_file.write_text("test")
             test_file.unlink()
             

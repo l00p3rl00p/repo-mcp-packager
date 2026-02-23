@@ -143,7 +143,6 @@ This is where most mistakes happen. Follow the "Comma Rule" strictly.
 | Server | Name | Command | Args |
 |--------|------|---------|------|
 | **Agent Browser** | `agent-browser` | `npx` | `["-y", "@vercel/agent-browser", "mcp"]` |
-| **Shesha/Librarian** | `shesha` | `/path/to/.venv/bin/librarian` | `["mcp", "run"]` |
 | **NotebookLM** | `notebooklm` | `npx` | `["-y", "github:jacob-bd/notebooklm-mcp-cli"]` |
 | **AI Studio** | `aistudio` | `npx` | `["-y", "aistudio-mcp-server"]` |
 
@@ -208,13 +207,13 @@ After saving the config file:
 ```json
 {
   "mcpServers": {
-    "shesha": {
-      "command": "/Users/you/projects/shesha/.venv/bin/librarian",
-      "args": ["mcp", "run"]
-    },
     "agent-browser": {
       "command": "npx",
       "args": ["-y", "@vercel/agent-browser", "mcp"]
+    },
+    "notebooklm": {
+      "command": "npx",
+      "args": ["-y", "github:jacob-bd/notebooklm-mcp-cli"]
     },
     "aistudio": {
       "command": "npx",
@@ -228,7 +227,7 @@ After saving the config file:
 ```
 
 **Notice:**
-- Commas after `shesha` and `agent-browser` entries
+- Commas after `agent-browser` and `notebooklm` entries
 - NO comma after `aistudio` (the last entry)
 - Consistent 2-space indentation
 
