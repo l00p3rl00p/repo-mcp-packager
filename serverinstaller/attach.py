@@ -266,7 +266,8 @@ def main():
     parser.add_argument("--detect", action="store_true", help="Detect installed IDEs")
     parser.add_argument("--attach", metavar="SERVER_NAME", help="Server name to attach")
     parser.add_argument("--command", default="npx", help="Server command")
-    parser.add_argument("--args", nargs="+", help="Server arguments")
+    # Accept args that start with '-' (e.g. `npx -y ...`) without argparse treating them as top-level flags.
+    parser.add_argument("--args", nargs=argparse.REMAINDER, help="Server arguments")
     parser.add_argument("--clients", nargs="+", help="Specific clients (claude, xcode, etc.)")
     
     args = parser.parse_args()
@@ -285,11 +286,16 @@ def main():
         if not args.args:
             print("❌ --args required for attachment")
             return
+
+        # If a user included an explicit "--" separator, treat it as "end of options" and drop it.
+        cmd_args = list(args.args or [])
+        if cmd_args and cmd_args[0] == "--":
+            cmd_args = cmd_args[1:]
         
         server_config = {
             "name": args.attach,
             "command": args.command,
-            "args": args.args
+            "args": cmd_args
         }
         
         results = attach_to_clients(
