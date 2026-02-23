@@ -144,7 +144,7 @@ This is where most mistakes happen. Follow the "Comma Rule" strictly.
 |--------|------|---------|------|
 | **Agent Browser** | `agent-browser` | `npx` | `["-y", "@vercel/agent-browser", "mcp"]` |
 | **Shesha/Librarian** | `shesha` | `/path/to/.venv/bin/librarian` | `["mcp", "run"]` |
-| **NotebookLM** | `notebooklm` | `npx` | `["-y", "notebooklm-mcp-cli"]` |
+| **NotebookLM** | `notebooklm` | `npx` | `["-y", "github:jacob-bd/notebooklm-mcp-cli"]` |
 | **AI Studio** | `aistudio` | `npx` | `["-y", "aistudio-mcp-server"]` |
 
 ---
