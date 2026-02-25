@@ -1,20 +1,25 @@
-# User Outcomes - Git Repo MCP Converter & Installer
+# User Outcomes - Nexus Activator Packager (repo-mcp-packager)
 
-This document defines what success looks like for the "Clean Room Installer" and ensures the technical path aligns with the mission of friction-less replication.
+This document defines success for the **Nexus Activator (The Forge)Packager**, the core engine responsible for deterministic installation, environment orchestration, and suite-wide synchronization.
 
 ---
 
-## 🔗 Canonical Outcomes (Project Scope)
+## 🔗 Canonical Outcomes & Mission (Project Scope)
 
-This repo-level `USER_OUTCOMES.md` is subordinate to the canonical, project-wide outcomes:
+This repo-level `USER_OUTCOMES.md` is subordinate to the canonical [Workforce Nexus Mission Statement](/Users/almowplay/Developer/Github/mcp-creater-manager/USER_OUTCOMES.md).
 
-* `/Users/almowplay/Developer/Github/mcp-creater-manager/USER_OUTCOMES.md`
-* `/Users/almowplay/Developer/Github/mcp-creater-manager/EVIDENCE.md`
+## Core Mission Statement - READ ONLY- NEVER EDIT
 
-If there is drift between this file and the canonical outcomes/evidence, treat this file as informational only and update it to match the canonical sources.
+The mission is to achieve 100% deterministic installation and suite-wide synchronization through an autonomous 'Just Works' orchestration engine. By maintaining a hardened Managed Mirror and providing atomic, surgical updates, it ensures the entire Workforce Nexus suite remains stable, isolated, and perfectly aligned with its source of truth across any host system.
 
-## ⚡ Quick Summary
-* **Mission Statement**: To provide a "Just Works" installation experience that creates zero-leak, isolated environments allowing agents to replicate the packager stack without friction.
+### The Rule of Ones: The ACTIVATOR PACKAGER (The forge)System Architecture 
+The Nexus Activator provides the structural foundation and update loop for the ecosystem, anchored in:
+- **One Install Path:** A single, unified deployment script (`setup.sh` / `nexus.sh`) that bootstraps the entire suite.
+- **One Entry Point:** The `mcp-activator` CLI and the "Maintenance" section of the Nexus Commander GUI.
+- **One Status:** Deterministic verification reports (`verify.py`) proving suite-wide alignment and environment health.
+- **One Log:** Detailed logs of repository synchronization, virtual environment creation, and dependency resolution.
+
+
 
 ---
 
@@ -25,14 +30,27 @@ If there is drift between this file and the canonical outcomes/evidence, treat t
 
 ---
 
-## 🔍 Successful Outcomes
+## 🔍 Successful Outcomes (Nexus Activator)
 
 As a user, I want:
 
-### 1. Portability & Isolation
-* **Standalone Execution**: The `/serverinstaller` directory can be copied to any repo and execute correctly without external dependencies.
-* **Environment Integrity**: The installer bootstraps from the host's existing tools and create isolated environments (e.g., `.venv`) to prevent leaks.
-* **Zero-Touch Replication**: A real agent can execute `install.py --headless` and achieve a functional stack without human intervention.
+### 1. Deterministic Suite Installation
+* **One-Command Setup**: Run `./nexus.sh` from any project root to automatically pull the suite, build the environments, and launch the dashboard.
+* **Environment Integrity**: Bootstraps isolated virtual environments (`.venv`) for all components to prevent global package leaks and version conflicts.
+* **Zero-Touch Replication**: A real agent or non-technical user can execute the installer in headless mode and achieve a 100% functional stack without intervention.
+
+### 2. Intelligent Syncing (Managed Mirror)
+* **Autonomous Bootstrap**: Fetch the entire Workforce Nexus suite from GitHub even if only a single standalone script is present locally.
+* **Industrial Sync**: Running `mcp-activator --sync` results in a hardened update loop that handles merge conflicts via forced resets, ensuring the local mirror is always stable.
+* **Inventory Awareness**: Automatically identify available developer tools (Python, Node, Docker) and tailor the installation to the host's capabilities.
+
+### 3. Trust & Surgical Reversibility
+* **Clean Uninstall**: The `uninstall.py` command must surgically reverse ONLY the changes it made, returning the host system to its pre-installation state (removing PATH blocks, wrappers, and central tool dirs).
+* **Before/After Verification**: Generate a detailed "Purge Checklist" on the OS Desktop after uninstallation to prove removal of all artifacts.
+
+### 4. Resilient Lifecycle
+* **Context-Locked Execution**: Entry points (`mcp-*`) must carry their own venv pointers to work regardless of the user's active terminal or global Python state.
+* **Atomic Rollback**: If an installation or sync step fails, the Activator must revert to the last known-good state to avoid leaving broken partial artifacts.
 
 ### 2. Intelligent Discovery & Autonomy
 * **Autonomous Bootstrap**: The Activator can fetch the entire Workforce Nexus suite from GitHub, allowing it to move from "standalone script" to "suite architect" without local source siblings.

@@ -4,17 +4,22 @@ Success criteria for the portable clean room installer.
 
 ---
 
-## 🔗 Canonical Outcomes (Project Scope)
+## 🔗 Canonical Outcomes & Mission (Project Scope)
 
-This repo-level `USER_OUTCOMES.md` is subordinate to the canonical, project-wide outcomes:
+This repo-level `USER_OUTCOMES.md` is subordinate to the canonical [Workforce Nexus Mission Statement](/Users/almowplay/Developer/Github/mcp-creater-manager/USER_OUTCOMES.md).
 
-* `/Users/almowplay/Developer/Github/mcp-creater-manager/USER_OUTCOMES.md`
-* `/Users/almowplay/Developer/Github/mcp-creater-manager/EVIDENCE.md`
+### 🏛 Core Mission Statement
+> "The mission is to empower ANY USER of ANY TECHNICAL SKILL LEVEL to transform any discovered git repositories, local files, or web content into MCP servers. These MCP servers use token-optimized, Agent Tool Protocol (ATP)-wrapped execution. The system features a 'Nexus' GUI for zero-friction monitoring, maintenance, and upgrades. It prioritizes low friction use and token efficiency in all architectural suggestions."
 
-If there is drift between this file and the canonical outcomes/evidence, treat this file as informational only and update it to match the canonical sources.
+### ⚖️ The Rule of Ones
+- **One Install Path:** A single, unified deployment mechanism.
+- **One Entry Point:** A singular UI/UX and "Front Door" command.
+- **One Status:** A clear, unified health dashboard for the entire ecosystem.
+- **One Log:** A centralized observability trail for all components and itself.
 
 ## ⚡ Quick Summary
-* **Mission**: To provide a "Just Works" installation experience that creates zero-leak, isolated environments.
+* **Mission**: To provide a "Just Works" installation experience that creates zero-leak, isolated environments for 
+
 
 ---
 
