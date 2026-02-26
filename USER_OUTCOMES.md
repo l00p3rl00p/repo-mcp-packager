@@ -110,3 +110,25 @@ To fully align with these outcomes, the following enhancements are planned:
 * **`--repair` is now the single command**: Replaced the dual `--sync` / surgical `--repair` with one unified `--repair` flag that does everything — source copy, venv rebuild, GUI rebuild, Librarian index.
 * **Auto GUI Rebuild**: `build_gui_if_stale()` runs inside `--repair`. No separate `npm run build` step needed.
 * **`py-modules` Fix**: `nexus_devlog` and `nexus_session_logger` are now declared in `pyproject.toml`, eliminating the `ModuleNotFoundError` on first run.
+
+---
+### 2026-02-25 Mission Audit Results (v3.3.4 Red Team)
+**Mission Score: 89%** | Anchored to: *"100% deterministic installation and suite-wide synchronization."*
+
+| Feature | Status | Confidence |
+|---|---|---|
+| Deterministic install (`./nexus.sh` → full stack) | ✅ | 95% |
+| Managed Mirror (`--repair` = source sync + reset) | ✅ | 90% |
+| Atomic rollback on failure | 🟡 | 70% |
+| Auto GUI rebuild on `--repair` | ✅ | 92% |
+| Verification reports (`nexus-verify.py` exits 0) | ✅ | 95% |
+| One Entry Point: `mcp-activator --repair` | ✅ | 99% |
+| venv creation + dependency resolution logged | ✅ | 85% |
+
+#### 🔴 GAP-R1 (Open — v48 Backlog)
+> **Claim**: Atomic rollback if install fails at any step.
+> **Gap**: No ORT evidence that a mid-flight `--repair` failure (disk full, network drop) triggers a clean rollback. This is unproven ghost code until an ORT verifies it.
+> **Fix**: Write an ORT that intentionally interrupts `--repair` mid-git-pull and confirms the host is left clean.
+
+---
+*Status: v3.3.4 Audited — 2026-02-25*
