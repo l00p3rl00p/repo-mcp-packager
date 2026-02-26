@@ -140,7 +140,7 @@ If you want the activator to install/update additional git repos alongside the N
 ```
 Notes:
 * Prefer SSH URLs; avoid embedding access tokens in config files.
-* These repos are fetched/updated during `bootstrap.py --sync` (GitHub mode) and installed into `~/.mcp-tools/<repo-name>`.
+* These repos are fetched/updated during `bootstrap.py --repair` (GitHub mode) and installed into `~/.mcp-tools/<repo-name>`.
 
 ### Permissions Hardening (Phase 9)
 The environment must support `chmod` (POSIX) or equivalent ACL modifications.

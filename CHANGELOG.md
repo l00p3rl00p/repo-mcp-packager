@@ -3,7 +3,7 @@
 ## [3.3.4] - 2026-02-25
 
 ### Fixed
-- **ModuleNotFoundError on `--sync`**: Added `nexus_devlog` and `nexus_session_logger` to `py-modules` in `pyproject.toml`. These sibling modules were excluded from the editable install wheel, causing `mcp-activator --sync` to crash immediately on invocation.
+- **ModuleNotFoundError on `--repair`**: Added `nexus_devlog` and `nexus_session_logger` to `py-modules` in `pyproject.toml`. These sibling modules were excluded from the editable install wheel, causing `mcp-activator` to crash immediately on invocation.
 
 
 
