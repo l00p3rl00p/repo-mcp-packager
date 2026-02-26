@@ -41,7 +41,7 @@ As a user, I want:
 
 ### 2. Intelligent Syncing (Managed Mirror)
 * **Autonomous Bootstrap**: Fetch the entire Workforce Nexus suite from GitHub even if only a single standalone script is present locally.
-* **Industrial Sync**: Running `mcp-activator --sync` results in a hardened update loop that handles merge conflicts via forced resets, ensuring the local mirror is always stable.
+* **Industrial Repair**: Running `mcp-activator --repair` triggers the full rebuild loop: source sync + venv + GUI rebuild.
 * **Inventory Awareness**: Automatically identify available developer tools (Python, Node, Docker) and tailor the installation to the host's capabilities.
 
 ### 3. Trust & Surgical Reversibility
@@ -67,7 +67,7 @@ As a user, I want:
 
 ### 5. Resilient Lifecycle
 * **Atomic Rollback**: If an installation fails at any step, the system automatically reverts to a clean state, leaving no partial artifacts.
-* **Safe Upgrades**: The `mcp-activator --sync` command provides a unified update loop, ensuring all central tools stay synchronized with the latest security and feature patches.
+* **Safe Upgrades**: The `mcp-activator --repair` command is the single unified update loop — pulls source, rebuilds venv, rebuilds GUI.
 * **Context-Locked Execution**: Entry points carry their own venv and PYTHONPATH, ensuring they work regardless of the user's active terminal environment.
 
 ---
@@ -78,7 +78,7 @@ To fully align with these outcomes, the following enhancements are planned:
 
 *   **GUI Reliability (Target 95%+)**: Transition GUI from a blocking process to a background service with PID management.
 *   **Librarian Synergy**: Implement a dynamic watcher so the Librarian indexes changes in real-time, not just on installation.
-*   **Operational Awareness**: Add "version health" checks to the GUI dashboard to visually signal when a `--sync` is required.
+*   **Operational Awareness**: Add "version health" checks to the GUI dashboard to visually signal when a `--repair` is required.
 
 ### 2026-02-11 Alignment Update
 * **Injector Startup Detect**: Added startup detection/prompt flow for common IDE clients, including `claude`, `codex`, and `aistudio` (plus `google-antigravity` alias).
@@ -104,4 +104,9 @@ To fully align with these outcomes, the following enhancements are planned:
 
 * **No Sudo**: Reject any feature that requires global `sudo` permissions if a local `.venv` alternative exists.
 * **No Unmanaged Overwrites**: Reject any "auto-update" feature that replaces local configuration without a manifest-backed snapshot.
-* **Respect Local Code**: Treatment of the current repository state as the "source of truth." Never overwrite local changes with upstream templates.
+
+---
+### 2026-02-25 Command Unification Update (v3.3.4)
+* **`--repair` is now the single command**: Replaced the dual `--sync` / surgical `--repair` with one unified `--repair` flag that does everything — source copy, venv rebuild, GUI rebuild, Librarian index.
+* **Auto GUI Rebuild**: `build_gui_if_stale()` runs inside `--repair`. No separate `npm run build` step needed.
+* **`py-modules` Fix**: `nexus_devlog` and `nexus_session_logger` are now declared in `pyproject.toml`, eliminating the `ModuleNotFoundError` on first run.

@@ -939,7 +939,8 @@ def build_gui_if_stale(central: Path) -> None:
         print("✅ GUI build is current — skipping rebuild.")
         return
 
-    print("🔨 GUI source changed — rebuilding...")
+    print("🔨 GUI source changed — rebuilding (this may take ~60s)...")
+    start = __import__("time").time()
     try:
         result = subprocess.run(
             [npm, "run", "build"],
@@ -948,8 +949,9 @@ def build_gui_if_stale(central: Path) -> None:
             text=True,
             timeout=300,
         )
+        elapsed = round(__import__("time").time() - start)
         if result.returncode == 0:
-            print("✅ GUI rebuilt successfully.")
+            print(f"✅ GUI rebuilt successfully ({elapsed}s).")
         else:
             print(f"⚠️  GUI build failed (non-fatal):\n{result.stderr[-500:]}")
     except Exception as e:
