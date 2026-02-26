@@ -1,9 +1,9 @@
 # Changelog - Nexus Activator (repo-mcp-packager)
 
-## [3.3.1] - 2026-02-20
+## [3.3.3] - 2026-02-20
 
 ### Changed
-- **Suite Version Sync**: Aligned component and docs to Nexus `v3.3.1`.
+- **Suite Version Sync**: Aligned component and docs to Nexus `v3.3.3`.
 
 ## [3.2.1] - 2026-02-19
 
@@ -43,4 +43,4 @@
 - Industrial path management (`~/.mcp-tools`).
 
 ---
-*Status: Production Ready (v3.3.1)*
+*Status: Production Ready (v3.3.3)*

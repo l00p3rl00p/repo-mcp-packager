@@ -62,26 +62,39 @@ class ForgeEngine:
         sys.path.insert(0, str(target_path))
         
         try:
+            import random
             from atp_sandbox import ATPSandbox
             sb = ATPSandbox()
             
-            sentence = "The strawberry is Ripe and Ready, but are there 3 r's or 4?"
-            code = """
-text = context.get('text', '')
-target = context.get('char', 'r')
-result = {
-    "char": target,
-    "count": text.lower().count(target.lower()),
-    "source": "ATP_DETERMINISTIC_LOGIC"
-}
-"""
-            exec_res = sb.execute(code, {"text": sentence, "char": "r"})
+            tests = [
+                {
+                    "name": "Strawberry 'r' Count",
+                    "code": "result = {'count': context['text'].lower().count('r')}",
+                    "context": {"text": "The strawberry is Ripe and Ready, but are there 3 r's or 4?"},
+                    "expected": 9
+                },
+                {
+                    "name": "Math Evaluation",
+                    "code": "result = {'count': (15 * 3) + 7 - 2}",
+                    "context": {},
+                    "expected": 50
+                },
+                {
+                    "name": "List Filtering",
+                    "code": "result = {'count': len([x for x in context['nums'] if x % 2 == 0])}",
+                    "context": {"nums": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+                    "expected": 5
+                }
+            ]
+            test = random.choice(tests)
+            print(f"➜ Running randomized logic test: {test['name']}")
+            exec_res = sb.execute(test["code"], test.get("context", {}))
             
-            if exec_res["success"] and exec_res["result"].get("count") == 9:
-                print("✅ Strawberry Test passed: Deterministic Logic verified.")
+            if exec_res["success"] and isinstance(exec_res.get("result"), dict) and exec_res["result"].get("count") == test["expected"]:
+                print(f"✅ Logic Test ({test['name']}) passed: Deterministic Logic verified.")
             else:
-                error = exec_res.get("error", f"Count mismatch (Got {exec_res.get('result', {}).get('count')})")
-                print(f"⚠️ Strawberry Test failed: {error}")
+                error = exec_res.get("error", f"Mismatch (Got {exec_res.get('result', {}).get('count')}, expected {test['expected']})")
+                print(f"⚠️ Logic Test failed: {error}")
         except Exception as e:
             print(f"❌ Verification skipped: Could not run sandbox test ({e})")
         finally:
