@@ -48,4 +48,15 @@
 - Industrial path management (`~/.mcp-tools`).
 
 ---
-*Status: Production Ready (v3.3.3)*
+
+## [3.3.5] - 2026-02-25
+
+### Added
+- **Repair Rollback ORT (GAP-R1)**: `tests/test_ort_repair_rollback.py` — 3 tests. Proves that a simulated mid-flight `--repair` failure (exception raised after partial staging) leaves the managed central directory unchanged (sentinel file intact, no partial artifacts, no stray stage dirs). The rollback contract is now verified, not just claimed.
+
+### Fixed
+- No source changes to `bootstrap.py` — ORT proves the existing staged-copy + exception-rollback pattern is complete.
+
+---
+*Status: Production Ready (v3.3.5)*
+

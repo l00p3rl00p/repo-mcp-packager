@@ -362,3 +362,25 @@ $ python3 /Users/almowplay/Developer/Github/mcp-creater-manager/mcp-server-manag
 
 **Verification Date**: 2026-02-18
 **Status**: ✅ COMPLETE
+
+---
+
+### Unit v3.3.5-A: Repair Rollback ORT (GAP-R1) ✅
+
+**Closed Gap:** GAP-R1 — "No ORT evidence of mid-flight --repair failure and rollback. Claim is unproven."
+
+- [x] **`tests/test_ort_repair_rollback.py`** — 3 tests.
+- [x] **`test_sentinel_intact_after_failed_repair`**: SHA-256 hash of sentinel `pyproject.toml` unchanged after simulated failure + stage cleanup. No stray `.mcp-repair-stage*` dirs.
+- [x] **`test_no_partial_artifacts_in_central`**: File set before == file set after — partial artifacts rolled back on exception.
+- [x] **`test_repair_command_import`**: `bootstrap.py` spec loads without side effects (headless safe).
+
+**Test Evidence** (Executed 2026-02-25):
+```
+test_no_partial_artifacts_in_central ... ok
+test_repair_command_import ... ok
+test_sentinel_intact_after_failed_repair ... ok
+Ran 3 tests in 0.012s — OK
+```
+
+**Verification Date**: 2026-02-25
+**Status**: ✅ COMPLETE — rollback contract proven (sentinel intact, no partials, no strays)
