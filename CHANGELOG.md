@@ -1,9 +1,14 @@
 # Changelog - Nexus Activator (repo-mcp-packager)
 
-## [3.3.1] - 2026-02-20
+## [3.3.4] - 2026-02-25
+
+### Fixed
+- **ModuleNotFoundError on `--sync`**: Added `nexus_devlog` and `nexus_session_logger` to `py-modules` in `pyproject.toml`. These sibling modules were excluded from the editable install wheel, causing `mcp-activator --sync` to crash immediately on invocation.
+
+
 
 ### Changed
-- **Suite Version Sync**: Aligned component and docs to Nexus `v3.3.1`.
+- **Suite Version Sync**: Aligned component and docs to Nexus `v3.3.3`.
 
 ## [3.2.1] - 2026-02-19
 
@@ -43,4 +48,4 @@
 - Industrial path management (`~/.mcp-tools`).
 
 ---
-*Status: Production Ready (v3.3.1)*
+*Status: Production Ready (v3.3.3)*

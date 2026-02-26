@@ -680,6 +680,8 @@ def install_converged_application(
             )
         ensure_suite_index_prereqs(central)
         prompt_for_client_injection(workspace=workspace, central=central, tier=tier)
+        # Rebuild GUI if source is newer than dist (zero user action required)
+        build_gui_if_stale(central)
         # Trigger Librarian Synergy (Lazy sync)
         print("🧠 Triggering Librarian Suite Indexing...")
         try:
@@ -828,7 +830,7 @@ def create_hardened_entry_points(central: Path):
         # Rule of Ones: single front-door launcher.
         # `nexus` with no flags should open the guided CLI walkthrough (anti-lazy menu),
         # not launch a specific subsystem or print help.
-        # Power users can still pass flags (e.g. --sync, --gui) and the bootstrapper will route them.
+        # Power users can still pass flags (e.g. --repair, --gui) and the bootstrapper will route them.
         "nexus": ("repo-mcp-packager", "bootstrap.py", False),
     }
     
@@ -881,6 +883,77 @@ export PYTHONPATH="{central}/mcp-injector:{central}/mcp-link-library:{central}/m
             print(f"✅ Created hardened entry point: {cmd}")
         except Exception as e:
             print(f"❌ Failed to create entry point {cmd}: {e}")
+
+
+def build_gui_if_stale(central: Path) -> None:
+    """
+    Rebuild the React GUI (npm run build) only when src/ is newer than dist/.
+    Runs silently during --repair so the GUI always serves fresh assets.
+    No-op if npm is not available or the gui directory doesn't exist.
+    """
+    gui_dir = central / "mcp-server-manager" / "gui"
+    if not gui_dir.exists():
+        # Try workspace source if not mirrored yet
+        ws = get_workspace_root()
+        if ws:
+            gui_dir = ws / "mcp-server-manager" / "gui"
+    if not gui_dir.exists():
+        return  # Nothing to build
+
+    src_dir = gui_dir / "src"
+    dist_dir = gui_dir / "dist"
+    node_modules = gui_dir / "node_modules"
+
+    # Check if npm is available
+    npm = shutil.which("npm")
+    if not npm:
+        print("⚠️  GUI build skipped: npm not found in PATH.")
+        return
+
+    # Install node_modules if missing
+    if not node_modules.exists():
+        print("📦 GUI: node_modules missing — running npm install...")
+        try:
+            subprocess.run([npm, "install"], cwd=str(gui_dir), check=True, timeout=120)
+        except Exception as e:
+            print(f"⚠️  GUI npm install failed: {e}")
+            return
+
+    # Determine if a rebuild is needed
+    needs_build = False
+    if not dist_dir.exists():
+        needs_build = True
+    elif src_dir.exists():
+        # Compare newest src mtime vs newest dist mtime
+        try:
+            src_mtime = max(p.stat().st_mtime for p in src_dir.rglob("*") if p.is_file())
+            dist_mtime = max(
+                (p.stat().st_mtime for p in dist_dir.rglob("*") if p.is_file()),
+                default=0,
+            )
+            needs_build = src_mtime > dist_mtime
+        except Exception:
+            needs_build = True  # Err on the side of rebuilding
+
+    if not needs_build:
+        print("✅ GUI build is current — skipping rebuild.")
+        return
+
+    print("🔨 GUI source changed — rebuilding...")
+    try:
+        result = subprocess.run(
+            [npm, "run", "build"],
+            cwd=str(gui_dir),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0:
+            print("✅ GUI rebuilt successfully.")
+        else:
+            print(f"⚠️  GUI build failed (non-fatal):\n{result.stderr[-500:]}")
+    except Exception as e:
+        print(f"⚠️  GUI build error (non-fatal): {e}")
 
 
 def ensure_suite_index_prereqs(central: Path) -> None:
@@ -1077,30 +1150,28 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Commands (what they do):\n"
-            "  mcp-activator --sync             Update the central install (workspace or GitHub)\n"
+            "  mcp-activator --repair             Sync + rebuild Nexus from workspace or GitHub\n"
             "  mcp-activator --permanent        Install/repair the full suite into ~/.mcp-tools\n"
             "  mcp-activator --gui              Launch GUI after install/sync\n"
             "\n"
             "Common flows:\n"
             "  Install:   python3 bootstrap.py --permanent\n"
-            "  Update:    python3 bootstrap.py --sync\n"
+            "  Update:    python3 bootstrap.py --repair\n"
             "  GUI:       python3 bootstrap.py --permanent --gui\n"
         ),
     )
     parser.add_argument("--lite", action="store_true", help="Lite mode (Zero-Dep)")
     parser.add_argument("--industrial", "--permanent", action="store_true", dest="industrial", help="Industrial mode (Infrastructure)")
-    parser.add_argument("--sync", "--update", action="store_true", dest="sync", help="Sync/Update Workforce Nexus from workspace or GitHub")
+    parser.add_argument("--repair", action="store_true", dest="repair", help="Rebuild Nexus from workspace or GitHub (full sync + GUI rebuild)")
     parser.add_argument("--workspace", type=str, help="Explicit source workspace root (must contain Nexus repos as siblings)")
     parser.add_argument("--strategy", choices=["full", "step"], help="Installation strategy")
     parser.add_argument("--gui", action="store_true", help="Launch GUI after installation")
-    parser.add_argument("--add-to-path", action="store_true", help="Opt-in: add ~/.mcp-tools/bin to shell PATH (edits ~/.zshrc or ~/.bashrc)")
-    parser.add_argument("--no-user-wrappers", action="store_true", help="Do not install short-command wrappers into a user bin dir (default: ~/.local/bin)")
+    parser.add_argument("--add-to-path", action="store_true", help="Opt-in: add ~/.mcp-tools/bin to shell PATH")
+    parser.add_argument("--no-user-wrappers", action="store_true", help="Do not install short-command wrappers into a user bin dir")
     parser.add_argument("--wrappers-dir", type=str, help="Directory to install user wrappers into (default: ~/.local/bin)")
     parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
-    parser.add_argument("--repair", action="store_true", help="Repair venv and entry points without full re-install")
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output + devlog-friendly prints")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     args = parser.parse_args()
     
@@ -1113,13 +1184,11 @@ def main():
         global DEVLOG
         DEVLOG = devlog_path()
         log_event(DEVLOG, "bootstrap_start", {"argv": sys.argv})
-        if args.verbose:
-            print(f"[-] Devlog: {DEVLOG}")
             
     if SessionLogger:
         SessionLogger.log("INFO", "Nexus Bootstrap Initiated", suggestion="Checking workspace integrity...")
 
-    if args.sync:
+    if args.repair:
         workspace = None
         if args.workspace:
             candidate = Path(args.workspace).expanduser()
@@ -1133,7 +1202,7 @@ def main():
         # Only a full dev workspace should be used as the *source* for sync.
         # If we can't prove that, fall back to GitHub update mode.
         if workspace and not detect_full_suite(workspace):
-            print(f"🔄 Workspace incomplete at {workspace}; syncing Industrial Nexus via GitHub instead.")
+            print(f"🔄 Workspace incomplete at {workspace}; rebuilding via GitHub instead.")
             workspace = None
 
         if not workspace:
@@ -1191,8 +1260,11 @@ def main():
             
             # Refresh suite prereqs
             ensure_suite_index_prereqs(central)
-            
-            print("\n✅ Repair Completed. All entry points and venv refreshed.")
+
+            # Rebuild GUI if stale (repair should also fix the frontend)
+            build_gui_if_stale(central)
+
+            print("\n✅ Repair Completed. All entry points, venv, and GUI refreshed.")
             save_install_state(central, installed=True, tier="industrial", last_action="repair")
             write_suite_manifest(central=central, tier="industrial", action="repair", workspace=get_workspace_root())
         except Exception as e:

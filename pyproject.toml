@@ -1,6 +1,6 @@
 [project]
 name = "mcp-activator"
-version = "3.3.0"
+version = "3.3.3"
 description = "Industrial MCP server orchestration and installation."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -13,4 +13,4 @@ dependencies = [
 mcp-activator = "bootstrap:main"
 
 [tool.setuptools]
-py-modules = ["bootstrap"]
+py-modules = ["bootstrap", "nexus_devlog", "nexus_session_logger"]

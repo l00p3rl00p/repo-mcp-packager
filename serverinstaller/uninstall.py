@@ -732,9 +732,8 @@ class NexusUninstaller:
 
         # If we are doing a true wipe, stop the running tray/bridge first; a deleted folder
         # doesn't stop a backgrounded Python process.
-        if self.kill_venv:
-            _terminate_nexus_processes(verbose=self.verbose, devlog=self.devlog)
-            actions.append("Attempted to terminate running Nexus processes (best-effort).")
+        _terminate_nexus_processes(verbose=self.verbose, devlog=self.devlog)
+        actions.append("Attempted to terminate running Nexus processes (best-effort).")
 
         # Central suite cleanup:
         # - If --kill-venv is set: delete ~/.mcp-tools entirely (includes .venv)
