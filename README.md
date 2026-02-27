@@ -49,7 +49,18 @@ Every operation follows a strict **Pre-flight -> Track -> Commit/Rollback** patt
 
 ---
 
+## 🔄 Drift Lifecycle Integration (v3.3.6+)
+
+The Activator (Packager) integrates with the Drift Lifecycle system:
+- **Sync Engine**: Manages repository state alignment during drift detection
+- **Multi-Repo Orchestration**: Coordinates drift detection across all 4 Nexus repos
+- **Safe Repair**: Deterministic repair without data loss
+
+See main repo: [Drift Lifecycle System](../DRIFT_LIFECYCLE_OUTCOMES.md)
+
+---
+
 ## 📝 Metadata
-* **Status**: Production Ready (v3.3.3)
+* **Status**: Production Ready (v3.3.6)
 * **Part of**: The Workforce Nexus Suite
-* **Protocol**: True Start v3.3.3
+* **Protocol**: True Start v3.3.6

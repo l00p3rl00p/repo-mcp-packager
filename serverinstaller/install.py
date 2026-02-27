@@ -228,7 +228,8 @@ class NexusInstaller:
             selected = candidates[int(choice) - 1]
             self.ensure_executable(selected)
             return selected
-        except:
+        except OSError as e:
+            logger.error(f"OS error: {e}", exc_info=True)
             self.log("Invalid selection. Defaulting to first candidate.")
             self.ensure_executable(candidates[0])
             return candidates[0]
@@ -401,7 +402,8 @@ class NexusInstaller:
                 ["git", "config", "--get", "remote.origin.url"],
                 cwd=self.project_root, text=True
             ).strip()
-        except:
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}", exc_info=True)
             pass
 
         manifest_data: Dict[str, Any] = {
@@ -642,7 +644,8 @@ requires-python = ">=3.6"
                             "command": "npx",
                             "args": ["-y", pkg_data["name"], "mcp"]
                         }
-                except:
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parse error: {e}", exc_info=True)
                     pass
         
         # Step 2: Attach to IDEs if requested

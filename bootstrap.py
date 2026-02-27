@@ -170,7 +170,8 @@ def git_available():
     try:
         subprocess.run(["git", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
-    except:
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Process error: {e}", exc_info=True)
         return False
 
 def _is_probably_git_url(value: str) -> bool:
@@ -1140,7 +1141,8 @@ def generate_integrity_manifest(central: Path):
                 rel_path = path.relative_to(central)
                 sha = hashlib.sha256(path.read_bytes()).hexdigest()
                 hashes.append(f"{sha}  {rel_path}")
-            except:
+            except OSError as e:
+                logger.error(f"OS error: {e}", exc_info=True)
                 pass
                 
     manifest_file.write_text("\n".join(hashes), encoding="utf-8")

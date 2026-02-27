@@ -1,3 +1,25 @@
+"""
+Nexus Forge Engine (Packager Edition) — MCP Server Factory
+
+THREAT MODEL:
+- Converts untrusted source folders into standardized MCP servers
+- Validates subprocess calls (git clone, python execution) with strict bounds
+- Sandbox injection ensures arbitrary code in sources cannot escape
+- JSON parsing from untrusted sources caught with specific exception handlers
+
+SECURITY ASSUMPTIONS:
+- git clone URLs are validated (no shell metacharacters)
+- subprocess calls use list-based argv (not shell=True, no shlex injection)
+- Imported sandbox and wrapper modules are trusted (from suite_root)
+- YAML parsing is safe_load() only (no arbitrary Python object instantiation)
+
+DESIGN RATIONALE:
+- Exception handling is specific (json.JSONDecodeError, subprocess.CalledProcessError)
+- Logging at each critical step enables debugging without exposing secrets
+- Sandbox injection into every forged server prevents jailbreaks from forged code
+- Two-phase JSON parsing (ast.literal_eval first, then json) catches malformed data early
+"""
+
 import os
 import sys
 import shutil
@@ -9,11 +31,28 @@ import yaml
 
 class ForgeEngine:
     """
-    Workforce Nexus Forge Engine (The Factory) - Packager Edition
+    Workforce Nexus Forge Engine (The Factory) — Packager Edition.
+    
     Converts arbitrary folders or repositories into compliant MCP servers.
+    
+    THREAT MODEL:
+    - Handles untrusted source repositories and folder structures
+    - Injects trusted wrapper/sandbox to isolate source code
+    - Validates all subprocess calls with specific exception handling
+    
+    ASSUMPTIONS:
+    - suite_root is trusted (writeable, contains mcp-link-library)
+    - Git URLs passed to _clone_repo are validated externally
+    - YAML inventory file is trusted (not user-controllable)
     """
 
     def __init__(self, suite_root: Path):
+        """
+        Initialize ForgeEngine with suite root path.
+        
+        Locates mcp-link-library for wrapper/sandbox injection and
+        inventory.yaml for server registration.
+        """
         self.suite_root = suite_root
         # In the context of repo-mcp-packager, we might need to find where the wrappers are
         # Usually they are in mcp-link-library
@@ -22,8 +61,29 @@ class ForgeEngine:
 
     def forge(self, source: str, target_name: Optional[str] = None) -> Path:
         """
-        Main entry point for forging a server.
-        source: A local path or a Git URL.
+        Main entry point for forging a server from untrusted source.
+        
+        THREAT MODEL:
+        - Source may contain malicious code (handled by sandbox injection)
+        - Git URL is validated and cloned into managed directory
+        - All generated files follow compliance kit standards
+        
+        ASSUMPTIONS:
+        - source is either a Git URL or a validated local path
+        - target_name is optional; defaults to repo name
+        - Caller verifies result before deploying to production
+        
+        ERROR HANDLING:
+        - FileNotFoundError: Source path does not exist
+        - subprocess.CalledProcessError: Git clone failed
+        - Other exceptions: Logged; partial state may exist (caller cleans up)
+        
+        Args:
+            source (str): Local path or Git URL
+            target_name (Optional[str]): Override directory name
+            
+        Returns:
+            Path: Directory where server was forged
         """
         # 1. Determine local path
         if source.startswith(("http://", "https://", "git@")):
