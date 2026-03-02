@@ -1175,6 +1175,7 @@ def main():
     parser.add_argument("--wrappers-dir", type=str, help="Directory to install user wrappers into (default: ~/.local/bin)")
     parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
+    parser.add_argument("--upgrade-sync", action="store_true", help="Sync local workspace to central mirror (GUI + Binaries)")
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     args = parser.parse_args()
@@ -1192,7 +1193,7 @@ def main():
     if SessionLogger:
         SessionLogger.log("INFO", "Nexus Bootstrap Initiated", suggestion="Checking workspace integrity...")
 
-    if args.repair:
+    if args.repair or args.upgrade_sync:
         workspace = None
         if args.workspace:
             candidate = Path(args.workspace).expanduser()
@@ -1209,8 +1210,9 @@ def main():
             print(f"🔄 Workspace incomplete at {workspace}; rebuilding via GitHub instead.")
             workspace = None
 
+        action_name = "Syncing" if args.upgrade_sync else "Repairing"
         if not workspace:
-            print("🔄 No workspace found. Syncing Industrial Nexus via GitHub...")
+            print(f"🔄 No workspace found. {action_name} Industrial Nexus via GitHub...")
             install_converged_application(
                 'industrial',
                 None,
@@ -1223,7 +1225,7 @@ def main():
             )
             log_event(DEVLOG, "bootstrap_end", {"rc": 0})
             return
-        print(f"🔄 Syncing Industrial Nexus from local workspace: {workspace}")
+        print(f"🔄 {action_name} Industrial Nexus from local workspace: {workspace}")
         install_converged_application(
             'industrial',
             workspace,
