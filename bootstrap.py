@@ -1154,7 +1154,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Commands (what they do):\n"
-            "  mcp-activator --repair             Sync + rebuild Nexus from workspace or GitHub\n"
+            "  mcp-activator --repair             Rebuild Nexus from workspace or GitHub\n"
             "  mcp-activator --permanent        Install/repair the full suite into ~/.mcp-tools\n"
             "  mcp-activator --gui              Launch GUI after install/sync\n"
             "\n"
@@ -1176,7 +1176,6 @@ def main():
     parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
     parser.add_argument("--upgrade", action="store_true", help="Pull latest Nexus from GitHub and redeploy into ~/.mcp-tools")
-    parser.add_argument("--upgrade-sync", action="store_true", help="[Deprecated] Alias for --upgrade")  # kept for back-compat
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     parser.add_argument("--version", action="store_true", help="Print Nexus version and exit")
@@ -1248,11 +1247,9 @@ def main():
     if SessionLogger:
         SessionLogger.log("INFO", "Nexus Bootstrap Initiated", suggestion="Checking workspace integrity...")
 
-    # --upgrade (and its deprecated alias --upgrade-sync) always pulls latest from GitHub.
+    # --upgrade always pulls latest from GitHub.
     # It NEVER copies from a local workspace — the canonical source of truth is GitHub.
-    if getattr(args, 'upgrade', False) or getattr(args, 'upgrade_sync', False):
-        if getattr(args, 'upgrade_sync', False) and not getattr(args, 'upgrade', False):
-            print("⚠️  --upgrade-sync is deprecated. Use --upgrade instead.")
+    if getattr(args, 'upgrade', False):
         print("🔄 Upgrading Industrial Nexus — pulling latest from GitHub...")
         install_converged_application(
             'industrial',
@@ -1382,7 +1379,7 @@ def main():
     # Intelligent re-run behavior: when already installed, offer actions first.
     existing = detect_existing_install(central)
     state = load_install_state(central)
-    if existing and not args.force and not args.sync:
+    if existing and not args.force:
         action = rerun_action_menu(workspace=workspace, central=central, last_tier=state.get("tier"))
         if action == "exit":
             return
