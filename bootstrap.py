@@ -1175,7 +1175,8 @@ def main():
     parser.add_argument("--wrappers-dir", type=str, help="Directory to install user wrappers into (default: ~/.local/bin)")
     parser.add_argument("--overwrite-wrappers", action="store_true", help="Overwrite existing user wrappers if present")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
-    parser.add_argument("--upgrade-sync", action="store_true", help="Sync local workspace to central mirror (GUI + Binaries)")
+    parser.add_argument("--upgrade", action="store_true", help="Pull latest Nexus from GitHub and redeploy into ~/.mcp-tools")
+    parser.add_argument("--upgrade-sync", action="store_true", help="[Deprecated] Alias for --upgrade")  # kept for back-compat
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     parser.add_argument("--version", action="store_true", help="Print Nexus version and exit")
@@ -1247,42 +1248,15 @@ def main():
     if SessionLogger:
         SessionLogger.log("INFO", "Nexus Bootstrap Initiated", suggestion="Checking workspace integrity...")
 
-    if args.repair or args.upgrade_sync:
-        workspace = None
-        if args.workspace:
-            candidate = Path(args.workspace).expanduser()
-            if candidate.exists() and candidate.is_dir() and not _is_central_install_dir(candidate):
-                workspace = candidate
-            else:
-                print(f"⚠️  Ignoring invalid --workspace: {args.workspace}")
-        if not workspace:
-            workspace = get_workspace_root()
-
-        # Only a full dev workspace should be used as the *source* for sync.
-        # If we can't prove that, fall back to GitHub update mode.
-        if workspace and not detect_full_suite(workspace):
-            print(f"🔄 Workspace incomplete at {workspace}; rebuilding via GitHub instead.")
-            workspace = None
-
-        action_name = "Syncing" if args.upgrade_sync else "Repairing"
-        if not workspace:
-            print(f"🔄 No workspace found. {action_name} Industrial Nexus via GitHub...")
-            install_converged_application(
-                'industrial',
-                None,
-                update=True,
-                add_to_path=False,
-                user_wrappers=not args.no_user_wrappers,
-                wrappers_dir=Path(args.wrappers_dir).expanduser() if args.wrappers_dir else None,
-                overwrite_wrappers=args.overwrite_wrappers,
-                verbose=args.verbose,
-            )
-            log_event(DEVLOG, "bootstrap_end", {"rc": 0})
-            return
-        print(f"🔄 {action_name} Industrial Nexus from local workspace: {workspace}")
+    # --upgrade (and its deprecated alias --upgrade-sync) always pulls latest from GitHub.
+    # It NEVER copies from a local workspace — the canonical source of truth is GitHub.
+    if getattr(args, 'upgrade', False) or getattr(args, 'upgrade_sync', False):
+        if getattr(args, 'upgrade_sync', False) and not getattr(args, 'upgrade', False):
+            print("⚠️  --upgrade-sync is deprecated. Use --upgrade instead.")
+        print("🔄 Upgrading Industrial Nexus — pulling latest from GitHub...")
         install_converged_application(
             'industrial',
-            workspace,
+            None,  # GitHub mode: never use local workspace
             update=True,
             add_to_path=False,
             user_wrappers=not args.no_user_wrappers,
