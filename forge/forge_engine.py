@@ -46,45 +46,56 @@ class ForgeEngine:
     - YAML inventory file is trusted (not user-controllable)
     """
 
-    def __init__(self, suite_root: Path):
+    def __init__(self, suite_root: Path, inventory_path: Optional[Path] = None):
         """
         Initialize ForgeEngine with suite root path.
-        
+
         Locates mcp-link-library for wrapper/sandbox injection and
         inventory.yaml for server registration.
+
+        Args:
+            suite_root (Path): Root of the mcp-creater-manager suite.
+            inventory_path (Optional[Path]): Override the default inventory.yaml
+                location. Used by tests and alternate deployment layouts.
         """
         self.suite_root = suite_root
-        # In the context of repo-mcp-packager, we might need to find where the wrappers are
-        # Usually they are in mcp-link-library
         self.link_library = suite_root / "mcp-link-library"
-        self.inventory_path = suite_root / "mcp-server-manager" / "examples" / "inventory.yaml"
+        # Allow callers (tests, alternate layouts) to supply an explicit path.
+        if inventory_path is not None:
+            self.inventory_path = inventory_path
+        else:
+            self.inventory_path = suite_root / "mcp-server-manager" / "examples" / "inventory.yaml"
 
-    def forge(self, source: str, target_name: Optional[str] = None) -> Path:
+    def forge(self, source: str, target_name: Optional[str] = None,
+              stack: Optional[str] = None) -> Path:
         """
         Main entry point for forging a server from untrusted source.
-        
+
         THREAT MODEL:
         - Source may contain malicious code (handled by sandbox injection)
         - Git URL is validated and cloned into managed directory
         - All generated files follow compliance kit standards
-        
+
         ASSUMPTIONS:
         - source is either a Git URL or a validated local path
         - target_name is optional; defaults to repo name
         - Caller verifies result before deploying to production
-        
+
         ERROR HANDLING:
         - FileNotFoundError: Source path does not exist
         - subprocess.CalledProcessError: Git clone failed
         - Other exceptions: Logged; partial state may exist (caller cleans up)
-        
+
         Args:
             source (str): Local path or Git URL
             target_name (Optional[str]): Override directory name
-            
+            stack (Optional[str]): Tag the forged server with a named librarian stack.
+                Passed through to _register_inventory and resource ingestion.
+
         Returns:
             Path: Directory where server was forged
         """
+        self._forge_stack = stack  # propagate to downstream steps
         # 1. Determine local path
         if source.startswith(("http://", "https://", "git@")):
             target_path = self._clone_repo(source, target_name)
@@ -282,10 +293,10 @@ def handle_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if name == "ping":
                 # Rule 2: use _text() for tool results.
                 return _text(msg_id, json.dumps({{"ok": True, "ts": time.time(), "server": SERVER_NAME}}))
-            return _err(msg_id, -32601, "Unknown tool: " + name)
-        return _err(msg_id, -32601, "Unknown method: " + (method or ""))
+            return _err(msg_id, -32601, f"Unknown tool: {{name}}")
+        return _err(msg_id, -32601, f"Unknown method: {{method}}")
     except Exception as e:
-        return _err(msg_id, -32000, "Server error: " + str(e))
+        return _err(msg_id, -32000, f"Server error: {{e}}")
 
 
 def main() -> None:
@@ -675,6 +686,10 @@ if __name__ == "__main__":
         if any(s.get("id") == server_id for s in inventory["servers"]):
             return
 
+        tags = ["forged", "packager-v3"]
+        stack = getattr(self, "_forge_stack", None)
+        if stack:
+            tags.append(f"stack:{stack}")
         new_entry = {
             "id": server_id,
             "name": server_id,
@@ -682,7 +697,8 @@ if __name__ == "__main__":
             "confidence": "forged",
             "status": "ready",
             "source": source,
-            "tags": ["forged", "packager-v3"],
+            "stack": stack or "default",
+            "tags": tags,
             "added_on": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
         inventory["servers"].append(new_entry)

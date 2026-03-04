@@ -1178,8 +1178,62 @@ def main():
     parser.add_argument("--upgrade-sync", action="store_true", help="Sync local workspace to central mirror (GUI + Binaries)")
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
+    parser.add_argument("--version", action="store_true", help="Print Nexus version and exit")
+    parser.add_argument("--status", action="store_true", help="Show health of all installed Nexus subunits and exit")
     args = parser.parse_args()
     
+    # DU-V3.3.7: Unified status + version — short-circuit before any install logic.
+    _NEXUS_VERSION = "3.3.7"
+    _BIN_DIR = Path.home() / ".mcp-tools" / "bin"
+    _SUBUNITS = [
+        ("Observer",   "mcp-observer"),
+        ("Forger",     "mcp-forger"),
+        ("Librarian",  "nexus-librarian"),
+        ("Activator",  "mcp-activator"),
+    ]
+
+    if args.version:
+        print(f"Nexus v{_NEXUS_VERSION}")
+        return
+
+    if args.status:
+        print(f"Nexus v{_NEXUS_VERSION}")
+        print()
+        rows = []
+        for display_name, binary_name in _SUBUNITS:
+            path = _BIN_DIR / binary_name
+            installed = path.exists()
+            alive = False
+            if installed:
+                try:
+                    r = subprocess.run(
+                        [str(path), "--version"],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        timeout=5, shell=False,
+                    )
+                    alive = r.returncode == 0
+                except Exception:
+                    alive = False
+            if alive:
+                status = "\u2705 installed"
+                route_info = f"(routed via: {binary_name})"
+            elif installed:
+                status = "\u26a0\ufe0f  installed (unresponsive)"
+                route_info = f"(binary exists: {path})"
+            else:
+                status = "\u274c not installed"
+                route_info = ""
+            rows.append((display_name, status, route_info))
+        max_name = max(len(r[0]) for r in rows)
+        max_status = max(len(r[1]) for r in rows)
+        for i, (name, status, route_info) in enumerate(rows):
+            connector = "\u2514\u2500" if i == len(rows) - 1 else "\u251c\u2500"
+            print(f"{connector} {name:<{max_name}}  {status:<{max_status}}  {route_info}".rstrip())
+        print()
+        alive_count = sum(1 for r in rows if "\u2705" in r[1])
+        print(f"  {alive_count}/{len(rows)} subunits operational")
+        return
+
     if args.headless:
         global FORCE_HEADLESS
         FORCE_HEADLESS = True
