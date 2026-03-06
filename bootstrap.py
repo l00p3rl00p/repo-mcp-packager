@@ -849,7 +849,7 @@ def create_hardened_entry_points(central: Path):
         # `nexus` with no flags should open the guided CLI walkthrough (anti-lazy menu),
         # not launch a specific subsystem or print help.
         # Power users can still pass flags (e.g. --repair, --gui) and the bootstrapper will route them.
-        "nexus": ("repo-mcp-packager", "bootstrap.py", False),
+        "nexus": ("mcp-server-manager", "nexus_dispatcher.py", False),
     }
     
     for cmd, (repo, module, use_m) in commands.items():
@@ -1194,19 +1194,24 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force overwrite existing installations")
     parser.add_argument("--upgrade", action="store_true", help="Pull latest Nexus from GitHub and redeploy into ~/.mcp-tools")
     parser.add_argument("--headless", action="store_true", help="Run without interactive prompts (Agent Mode)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging output")
     parser.add_argument("--devlog", action="store_true", help="Write dev log (JSONL) with 90-day retention")
     parser.add_argument("--version", action="store_true", help="Print Nexus version and exit")
     parser.add_argument("--status", action="store_true", help="Show health of all installed Nexus subunits and exit")
     args = parser.parse_args()
     
-    # DU-V3.3.7: Unified status + version — short-circuit before any install logic.
-    _NEXUS_VERSION = "3.3.7"
+    # DU-V3.4.2: Unified status + version — short-circuit before any install logic.
+    VERSION_FILE = Path(__file__).parent.parent / "VERSION"
+    _NEXUS_VERSION = VERSION_FILE.read_text().strip() if VERSION_FILE.exists() else "3.4.2"
     _BIN_DIR = Path.home() / ".mcp-tools" / "bin"
     _SUBUNITS = [
         ("Observer",   "mcp-observer"),
         ("Forger",     "mcp-forger"),
-        ("Librarian",  "nexus-librarian"),
+        ("Librarian",  "mcp-librarian"),  # Corrected from nexus-librarian
         ("Activator",  "mcp-activator"),
+        ("Surgeon",    "mcp-surgeon"),
+        ("Injector",   "mcp-injector"),
+        ("Nexus",      "nexus"),
     ]
 
     if args.version:
@@ -1214,9 +1219,15 @@ def main():
         return
 
     if args.status:
-        print(f"Nexus v{_NEXUS_VERSION}")
+        # Simplified status table for bootstrap-level check
+        print(f"Workforce Nexus v{_NEXUS_VERSION} | Status")
+        print("-" * 50)
+        for name, binary in _SUBUNITS:
+            path = _BIN_DIR / binary
+            status = "✅" if path.exists() else "❌"
+            print(f"{status} {name:<12} | {path}")
         print()
-        rows = []
+        return
         for display_name, binary_name in _SUBUNITS:
             path = _BIN_DIR / binary_name
             installed = path.exists()

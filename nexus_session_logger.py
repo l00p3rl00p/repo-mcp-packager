@@ -7,11 +7,11 @@ from typing import Optional, Dict, Any
 class NexusSessionLogger:
     """
     Standardized logger for human-readable command timelines and agent 'thinking' states.
-    Writes to ~/.mcpinv/session.jsonl with size-based rotation.
+    Writes to ~/.mcp-tools/mcpinv/session.jsonl with size-based rotation.
     """
     
     def __init__(self, log_name: str = "session.jsonl", max_size_mb: int = 5):
-        self.log_path = Path.home() / ".mcpinv" / log_name
+        self.log_path = Path.home() / ".mcp-tools" / "mcpinv" / log_name
         self.max_size = max_size_mb * 1024 * 1024
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         
