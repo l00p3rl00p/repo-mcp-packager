@@ -555,6 +555,20 @@ def ensure_executable(path: Path):
         for item in path.iterdir():
             ensure_executable(item)
 
+def _preserve_user_data(target: Path) -> dict:
+    """Preserve specific user files before a directory wipe."""
+    preserved = {}
+    for filename in [".env", "user_outcomes.md", "custom_settings.json"]:
+        file_path = target / filename
+        if file_path.exists():
+            preserved[filename] = file_path.read_text(encoding="utf-8")
+    return preserved
+
+def _restore_user_data(preserved: dict, target: Path):
+    """Restore preserved user files to a newly created directory."""
+    for filename, content in preserved.items():
+        (target / filename).write_text(content, encoding="utf-8")
+
 def install_to_central(central, workspace=None, update=False):
     """Deploy repos to central location (~/.mcp-tools). Fetches from Git if workspace is missing."""
     central.mkdir(parents=True, exist_ok=True)
@@ -587,8 +601,10 @@ def install_to_central(central, workspace=None, update=False):
                 print("   A workspace `.env` can cause unintended conflicts with the central install in ~/.mcp-tools.")
                 print(f"   Path: {env_file}")
             # Mode A: Active Workspace Copy (Developer Mode)
+            _preserved = {}
             if target.exists():
                 try:
+                    _preserved = _preserve_user_data(target)
                     shutil.rmtree(target)
                 except Exception as e:
                     print(f"❌ Failed to remove existing {repo}: {e}")
@@ -597,6 +613,7 @@ def install_to_central(central, workspace=None, update=False):
             try:
                 # We copy the source. If it has .git, we copy it too (optional, but requested for 'can be updated')
                 shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '.venv', 'node_modules', '.DS_Store'))
+                _restore_user_data(_preserved, target)
                 INSTALLED_ARTIFACTS.append(target)
                 ensure_executable(target)
                 print(f"✅ Installed {repo} (Local Source)")
